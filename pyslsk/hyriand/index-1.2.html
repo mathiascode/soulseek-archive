@@ -1,0 +1,280 @@
+<html>
+<head>
+<title>Hyriand's UNOFFICIAL PySoulSeek patches</title>
+</head>
+<body>
+<center><h2>Hyriand's UNOFFICIAL PySoulSeek patches</h2>
+Welcome to this page. Here you can download my unofficial PySoulSeek patches.
+Please remember that I am not related to the
+<a href="http://www.sensi.org/~ak/pyslsk/" target="_blank">official PySoulSeek
+project</a>. Also, I cannot be held responsible for any damage these patches
+(or anything else for that matter) inflict on you, your system, your files
+or whatever you want to blame me of.<br>
+&nbsp;<br>
+These patches are licensed under the GNU General Public License [<a
+href="http://www.gnu.org/licenses/gpl.html" target="_blank">HTML</a>] [<a
+href="http://www.gnu.org/licenses/gpl.txt" target="_blank">PlainText</a>]
+</center><br>
+<hr>
+<h2><font color="red">These patches are no longer being maintained. They
+have been dumped in favor of <a
+href="http://nicotine.thegraveyard.org">Nicotine</a>.</font></h2>
+<hr>
+<h3>Credits:</h3>
+<ul>
+<li><b>SmackleFunky</b> for his poetry-like patch that added remembered
+searches (which, slightly modified, turned into autosearch), ignoring,
+PM history and incomplete folder. Fall down on your knees and praise the all-mighty
+SmackleFunky!
+<li><b>Wretched</b>, <b>daelstorm</b> and <b>anadyr</b> for sacrificing
+themselves and their computers to test my patches before you get them and
+giving me hints and tips on stuff I should (not) do. You should also thank
+or curse Wretched for the search filter help :-)
+<li><b>geertk</b> for his excellent recursive directory and hostname lookup
+patches (although the reverse lookup has been introduced in pyslsk-1.0.0 as
+a standard feature) and the how-to-apply-a-patch mini-guide.
+<li><b>ddbsa</b> for his excellent search filtering patch
+<li><b>alexbk</b> for creating pyslsk, and keeping me sharp by making sure
+lots of hunks of my patch fail against any new release.
+</ul>
+<hr>
+&nbsp;<br>
+Latest PySoulSeek release: <a
+href="pyslsk-1.2.3.tar.gz">1.2.3</a>
+(<a href="pyslsk-1.2.3-changelog" target="_blank">ChangeLog</a>)
+(locally mirrored)<br>
+&nbsp;<br>
+<b>Download the latest version of my patch:
+<a href="pyslsk-1.2.3-hyriand-10.2.patch">version 10.2</a> for
+pyslsk-1.2.3</b><br>
+<b>New:</b>Pre-patched tarball <a
+href="pyslsk-1.2.3-hyriand-10.2.tar.gz">pyslsk-1.2.3-hyriand-10.2.tar.gz</a></b><br>
+&nbsp;<br>
+<b><a href="#howto">---&gt; How to apply a patch</a></b><br>
+&nbsp;<br>
+<b>Incremental patches</b><br>
+<a href="pyslsk-1.2.3-hyriand-10.1-to-10.2.patch">pyslsk-1.2.3-hyriand-10.1-to-10.2.patch</a><br>
+<a href="pyslsk-1.2.3-hyriand-10-to-10.1.patch">pyslsk-1.2.3-hyriand-10-to-10.1.patch</a><br>
+&nbsp;<br>
+<a href="pyslsk-1.2.2-hyriand-8-to-9.patch">pyslsk-1.2.2-hyriand-8-to-9.patch</a><br>
+<a href="pyslsk-1.2.2-hyriand-8pre2-to-8.patch">pyslsk-1.2.2-hyriand-8pre2-to-8.patch</a><br>
+<a href="pyslsk-1.2.2-hyriand-7-to-8.patch">pyslsk-1.2.2-hyriand-7-to-8.patch</a><br>
+<a href="pyslsk-1.2.1-hyriand-5.2-to-6.patch">pyslsk-1.2.1-hyriand-5.2-to-6.patch</a><br>
+<a href="pyslsk-1.2.0-hyriand-5-to-5.1.patch">pyslsk-1.2.0-hyriand-5-to-5.1.patch</a><br>
+<a href="pyslsk-1.2.0-hyriand-4-to-5.patch">pyslsk-1.2.0-hyriand-4-to-5.patch</a><br>
+<a href="pyslsk-1.2.0-hyriand-3.1-to-4.patch">pyslsk-1.2.0-hyriand-3.1-to-4.patch</a><br>
+<a href="pyslsk-1.2.0-hyriand-3-to-3.1.patch">pyslsk-1.2.0-hyriand-3-to-3.1.patch</a><br>
+<a href="pyslsk-1.2.0-hyriand-2.2-to-3.patch">pyslsk-1.2.0-hyriand-2.2-to-3.patch</a><br>
+<a href="pyslsk-1.2.0-hyriand-2.1-to-2.2.patch">pyslsk-1.2.0-hyriand-2.1-to-2.2.patch</a><br>
+<a href="pyslsk-1.2.0-hyriand-2-to-2.1.patch">pyslsk-1.2.0-hyriand-2-to-2.1.patch</a><br>
+&nbsp;<br>
+<b>Old patches</b><br>
+<a href="pyslsk-1.2.3-hyriand-10.1.patch">pyslsk-1.2.3-hyriand-10.1.patch</a><br>
+<a href="pyslsk-1.2.2-hyriand-9.patch">pyslsk-1.2.2-hyriand-9.patch</a><br>
+<a href="pyslsk-1.2.2-hyriand-8.patch">pyslsk-1.2.2-hyriand-8.patch</a><br>
+<a href="pyslsk-1.2.2-hyriand-7.patch">pyslsk-1.2.2-hyriand-7.patch</a><br>
+<a href="pyslsk-1.2.1-hyriand-6.patch">pyslsk-1.2.1-hyriand-6.patch</a><br>
+<a href="pyslsk-1.2.1-hyriand-5.2.patch">pyslsk-1.2.1-hyriand-5.2.patch</a><br>
+<a href="pyslsk-1.2.0-hyriand-5.1.patch">pyslsk-1.2.0-hyriand-5.1.patch</a><br>
+<a href="pyslsk-1.2.0-hyriand-5.patch">pyslsk-1.2.0-hyriand-5.patch</a><br>
+<a href="pyslsk-1.2.0-hyriand-4.patch">pyslsk-1.2.0-hyriand-4.patch</a><br>
+<a href="pyslsk-1.2.0-hyriand-3.1.patch">pyslsk-1.2.0-hyriand-3.1.patch</a><br>
+<a href="pyslsk-1.2.0-hyriand-3.patch">pyslsk-1.2.0-hyriand-3.patch</a><br>
+<a href="pyslsk-1.2.0-hyriand-2.2.patch">pyslsk-1.2.0-hyriand-2.2.patch</a><br>
+<a href="pyslsk-1.2.0-hyriand-2.1.patch">pyslsk-1.2.0-hyriand-2.1.patch</a><br>
+<a href="pyslsk-1.2.0-hyriand-2.patch">pyslsk-1.2.0-hyriand-2.patch</a><br>
+&nbsp;<br>
+<hr>
+<h3>Added features</h3>
+<ul>
+<li>Total queue size limiter
+<li>Option to disable queue size limits for buddies
+<li>Placeholder icons for tabs, so pyslsk doesn't ahve to re-layour (tnx
+hdhg)
+<li>Faster connection to firewalled users if you're not firewalled yourself
+(enable "I can receive direct connections" in the server tab of the configuration
+screen)
+<li>Run a command when a transfer or directory finishes (to auto-enqueue in xmms for
+example) (filename is properly escaped etc). <b>Thanks Danial</b>
+<li>"Download to".. Select a download folder "on the fly"...
+<li>Auto-reply when away.. Send a canned message to user that send you a
+private message when you are away..
+<li>Incomplete dir. All incomplete files will be stored here and moved to
+the download directory when finished.
+<li>Regexp filter in/out. <b>This is an advanced option you should only use
+if you know what regexps are.</b> You can enable it in the Misc tab of the
+settings screen.
+<li>PM history (will show the last 15 lines of a conversation if loggin is
+enabled)
+<li>Search filtering (see new help screen)
+<li>Buttons on the user info are placed nicer
+<li>Set the maximum number of upload slots to use
+<li>Recursive directory downloading (thanks to geertk)
+<li>Command aliasing.. Create your own / commands. See below for syntaxis
+<li>GB/MB/KB filesizes in the transfers list
+<li>Locale-independant decimal separators
+<li>Configurable text colours for chats and search results
+<li>Allow people on your user list to be scheduled for uploads ahead of
+regular users (see the transfers tab in the settings dialog)
+</ul>
+<hr>
+<h3>Command aliasing</h3>
+This patch will allow you to create your own / commands.<br>
+&nbsp;<br>
+Examples:<br>
+<b>/alias np np: |(cat /tmp/xmms-info | grep "Title: " | sed "s/Title: //")</b><br>
+This will create a new /np command which you can use in chat
+windows. It will parse the XMMS Info-Pipe plugin file. And
+show something like <b>np: Ivory Frequency - Dancing Troops</b><br>
+&nbsp;<br>
+<b>/alias slap /me slaps $(1) with $(2:)</b><br>
+This will create a new /slap command. $(1) means "first
+parameter after the command",  $(2:) means "second parameter
+and everything after that". So <b>/slap hyriand a cannonball</b>
+would be expanded to <b>/me slaps hyriand with a cannonball</b>.<br>
+&nbsp;<br>
+<b>/alias slap /me slaps $(1=himself) with $(2:=a cannonball)</b><br>
+Same as above, but with default values for the parameters...<br>
+&nbsp;<br>
+<b>/alias run |($@)</b><br>
+Inside a pipe |( ), you can use $@ to be expanded to all arguments
+given to the /command.. So <b>/run uptime</b> will print your
+current uptime to the chat. You can also use $1, $2, etc...<br>
+&nbsp;<br>
+To display all aliases currently configured, type:<br>
+<b>/alias</b><br>
+To show the definition of the "slap" alias, type:<br>
+<b>/alias slap</b><br>
+To delete the "slap" alias, type:<br>
+<b>/unalias slap</b><br>
+&nbsp;<br>
+<hr>
+<h3>
+<ul>
+ <li>New: pre-patched tarball
+ <li>Bugfix: size is now humanized again
+ <li>Bugfix: total queue limit was always enabled
+</ul>
+<h3>New in version 10.1</h3>
+<ul>
+ <li>Bugfixes
+</ul>
+<h3>New in version 10</h3>
+<ul>
+ <li>Synced with pyslsk-1.2.3
+ <li>Implemented total queue size limit
+ <li>Implemented disable queue size limits for friends
+</ul>
+<h3>New in version 9</h3>
+<ul>
+ <li>Reduced flicker in search results when using filters
+ <li>Added filter history
+ <li>Collapsed log is remembered between pyslsk sessions
+</ul>
+<h3>New in version 8</h3>
+<ul>
+ <li>Server ping which occurs every 30 seconds
+ <li>Search history
+ <li>Command when folder finishes (<b>thanks Daniel</b>)
+</ul>
+<h3>New in version 7</h3>
+<ul>
+ <li><b>/clear /c</b> will clear a chat screen
+ <li>Userinfo and browse tabs show user status
+ <li>Synced with pyslsk-1.2.2
+</ul>
+<h3>New in version 6</h3>
+<ul>
+ <li>Collapsable log window
+ <li>Resizable panels won't be "lost" anymore
+ <li>Reversed something I did in a previous patch (see if you can find it)
+</ul>
+<h3>New in version 5.2</h3>
+<ul>
+ <li>Synced with pyslsk-1.2.1
+</ul>
+<h3>New in version 5.1</h3>
+<ul>
+ <li>Placeholders for tabs
+ <li>Auto-reply PMs are now only sent once
+</ul>
+<h3>New in version 5</h3>
+<ul>
+ <li>Added bloat: run a command when a download finishes
+ <li>Changed the fixed-slots thing into a slot-limiter
+ <li>No more zombie process after using an alias that has a pipe
+ <li>Fixed the worst/most fatal bug ever: a (*) appeared in the windows
+     title when you said your own name!
+</ul>
+<h3>New in version 4</h3>
+<ul>
+ <li>Faster connections to firewalled users
+ <li>"Download Directory to..." in user-browse
+ <li>Another small unicode fix...
+</ul>
+<h3>New in version 3.1</h3>
+<ul>
+ <li>Unicode fix for "Download to..."
+ <li>Off-by-one in search result numbering fixed
+ <li>Compatibility patch for python 2.2.0 (hi there Wretched)
+</ul>
+<h3>New in version 3</h3>
+<ul>
+ <li>Added "Download to" feature
+</ul>
+<h3>New in version 2.2</h3>
+<ul>
+ <li>Bugfix when incompletedir not set, things should work like regular
+pyslsk now
+</ul>
+<h3>New in version 2.1</h3>
+<ul>
+ <li>Bugfix.. uploads should work now...
+</ul>
+<h3>New in version 2</h3>
+<ul>
+ <li>Synced with pyslsk-1.2.0 (final)
+ <li>Incomplete dir (based on patch by SmackleFunky)
+ <li>Auto-reply when away
+</ul>
+<h3>New in version 1.4</h3>
+<ul>
+ <li>Synced with pyslsk-1.2.0pre4
+</ul>
+<h3>New in version 1.1 and 1.2 and 1.3</h3>
+<ul>
+ <li>Bugfixes
+</ul>
+<h3>New in version 1</h3>
+<ul>
+ <li>Fixed some small bugs
+ <li>Synced the 1.1.2-hyriand-1.7 patch with pyslsk-1.2.0pre3
+</ul>
+<a name="howto">
+<hr>
+<h3>Applying the patch</h3>
+1. When running from a source tarball:<br>
+<pre>
+cd /usr/local/src/pyslsk-1.2.1
+patch -p1 < /the/path/to/pyslsk-1.2.1-hyriand-X.patch
+</pre>
+And that's all.<br>
+&nbsp;<br>
+2. When running an installed version (e.g. rpm or deb):<br>
+&nbsp;<br>
+logged in as root do:<br>
+<pre>
+cd /usr/lib/python2.2/site-packages
+patch -p1 < /the/path/to/pyslsk-1.2.1-hyriand-X.patch
+</pre>
+When that's done pyslsk should be started as root once to get the
+appropiate .pyc files in place.  You won't have permissions to generate
+them when not running as root.<br>
+&nbsp;<br>
+On <b>debian</b> the path will be "<b>/usr/lib/site-python</b>" instead
+of "/usr/lib/python2.2/site-packages" (Red Hat/Mandrake/Gentoo).<br>
+&nbsp;<br>
+<hr>
+<h6 align="right">All contents (C) 2003, Hyriand</h6>
+</body>
+</html>

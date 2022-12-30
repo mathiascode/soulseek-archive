@@ -1,0 +1,246 @@
+diff -rNu3 slsk-tmp1/pysoulseek/config.py slsk-tmp2/pysoulseek/config.py
+--- slsk-tmp1/pysoulseek/config.py	2003-05-30 14:58:41.000000000 +0200
++++ slsk-tmp2/pysoulseek/config.py	2003-05-30 14:58:41.000000000 +0200
+@@ -35,7 +35,8 @@
+ 	"banlist":[], "ignorelist":[],"autojoin":["pyslsk"],"autoaway":15}, \
+ 	"transfers":{"downloaddir":None,"sharedownloaddir":1,"shared":None, \
+ 	"preferfriends":0, "useupslots":0, "uploadslots":2, "incompletedir":"", \
+-	"uploadbandwidth":100,"uselimit":0,"uploadlimit":100,"limitby":1,
++	"uploadbandwidth":100,"uselimit":0,"uploadlimit":100,"limitby":1, \
++	"afterfinish":"", \
+ 	"usecustomban":0,"customban":"don't bother to retry", "queuelimit":100,\
+ 	"downloads":[],"sharedfiles":{},"sharedfilesstreams":{}, \
+ 	"wordindex":{},"fileindex":{},"sharedmtimes":{},"rescanonstartup":0}, \
+@@ -56,7 +57,7 @@
+     def needConfig(self):
+ 	for i in self.sections.keys():
+ 	    for j in self.sections[i].keys():
+-		if self.sections[i][j] is None or self.sections[i][j] == '' and i not in ("userinfo", "ui") and j not in ("incompletedir", "autoreply"):
++		if self.sections[i][j] is None or self.sections[i][j] == '' and i not in ("userinfo", "ui") and j not in ("incompletedir", "autoreply", 'afterfinish'):
+ 		    return 1
+ 	return 0
+ 
+@@ -68,7 +69,7 @@
+ 		    print "Bogus config section:",i
+ 		elif j not in self.sections[i].keys():
+ 		    print "Bogus config option",j,"section",i
+-		elif j in ['login','passw','enc','downloaddir','customban','descr','pic','logsdir','incompletedir', 'autoreply'] or i == "ui":
++		elif j in ['login','passw','enc','downloaddir','customban','descr','pic','logsdir','incompletedir', 'autoreply', 'afterfinish'] or i == "ui":
+ 		    self.sections[i][j] = val
+ 		else:
+ 		    try:
+diff -rNu3 slsk-tmp1/pysoulseek/pysoulseek.py slsk-tmp2/pysoulseek/pysoulseek.py
+--- slsk-tmp1/pysoulseek/pysoulseek.py	2003-05-30 14:58:41.000000000 +0200
++++ slsk-tmp2/pysoulseek/pysoulseek.py	2003-05-30 14:58:41.000000000 +0200
+@@ -601,13 +601,9 @@
+ 	    pic = None
+ 	descr = eval(self.config.sections["userinfo"]["descr"])
+ 	if self.transfers is not None:
++	    totalupl = self.transfers.getTotalUploadsAllowed()
+ 	    queuesize = self.transfers.getUploadQueueSizes()[0]
+- 	    if self.config.sections["transfers"]["useupslots"]:
+- 	        totalupl = self.config.sections["transfers"]["uploadslots"]
+- 	        slotsavail = (totalupl - self.transfers.activeUploads()) > 0
+- 	    else:
+-	        totalupl = self.transfers.getTotalUploadsAllowed()
+- 	        slotsavail = not self.transfers.bandwidthLimitReached()
++ 	    slotsavail = not self.transfers.bandwidthLimitReached()
+ 	    self.queue.put(slskmessages.UserInfoReply(msg.conn.conn,descr,pic,totalupl, queuesize,slotsavail))
+ 
+ 	self.logMessage("%s %s" %(msg.__class__, vars(msg)),1)
+@@ -839,11 +835,7 @@
+ 	results = min[:maxresults]
+ 	if len(results) > 0 and self.transfers is not None:
+      	    queuesizes = self.transfers.getUploadQueueSizes()
+- 	    if self.config.sections["transfers"]["useupslots"]:
+- 	        totalupl = self.config.sections["transfers"]["uploadslots"]
+- 	        slotsavail = (totalupl - self.transfers.activeUploads()) > 0
+- 	    else:
+-  	        slotsavail = not self.transfers.bandwidthLimitReached()
++            slotsavail = not self.transfers.bandwidthLimitReached()
+ 	    if len(results) > 0:
+ 		message = slskmessages.FileSearchResult(None, user, searchid,results,fileindex,slotsavail, self.speed, queuesizes)
+ 		self.ProcessRequestToPeer(user, message)
+diff -rNu3 slsk-tmp1/pysoulseek/transfers.py slsk-tmp2/pysoulseek/transfers.py
+--- slsk-tmp1/pysoulseek/transfers.py	2003-05-30 14:58:41.000000000 +0200
++++ slsk-tmp2/pysoulseek/transfers.py	2003-05-30 14:58:41.000000000 +0200
+@@ -386,18 +386,13 @@
+     def transferNegotiating(self):
+ 	return len([i for i in self.uploads if i.req is not None or (i.conn is not None and i.speed is None) or i.status == 'Getting status']) > 0 #some file is being negotiated
+ 
+-    def activeUploads(self):
+-        return len([i for i in self.uploads if i.conn is not None and i.speed is not None])
+-
+     def bandwidthLimitReached(self):
+ 	maxbandwidth = self.eventprocessor.config.sections["transfers"]["uploadbandwidth"]
+ 	maxupslots = self.eventprocessor.config.sections["transfers"]["uploadslots"]
+ 	useupslots = self.eventprocessor.config.sections["transfers"]["useupslots"]
+ 	bandwidthlist = [i.speed for i in self.uploads if i.conn is not None and i.speed is not None]
+-	if not useupslots:
+-	    return reduce(lambda x, y: x+y, bandwidthlist, 0) > maxbandwidth
+-	else:
+-	    return len(bandwidthlist) >= maxupslots
++	slotsreached = len(bandwidthlist) >= maxupslots
++	return (reduce(lambda x, y: x+y, bandwidthlist, 0) > maxbandwidth) or (useupslots and slotsreached)
+ 
+     def getFileSize(self,filename):
+ 	try:
+@@ -584,6 +579,15 @@
+ 			    self.eventprocessor.sendNumSharedFoldersFiles()
+ 			    self.SaveDownloads()
+ 			    self.downloadspanel.update(i)
++			    if self.eventprocessor.config.sections["transfers"]["afterfinish"]:
++			        escaped = ""
++			        for ch in newname:
++			           if ch not in string.ascii_letters+string.digits+"/":
++			               escaped += "\\"
++			           escaped += ch
++			        command = self.eventprocessor.config.sections["transfers"]["afterfinish"].replace("$", escaped)
++			        os.system(command)
++			        self.eventprocessor.logMessage("Executed: %s" % command)
+ 		    except IOError, (errno, strerror):
+ 			self.eventprocessor.logMessage("I/O error(%s): %s" % (errno, strerror))
+                         i.status = "Local file error"
+diff -rNu3 slsk-tmp1/pysoulseek/utils.py slsk-tmp2/pysoulseek/utils.py
+--- slsk-tmp1/pysoulseek/utils.py	2003-05-30 14:58:41.000000000 +0200
++++ slsk-tmp2/pysoulseek/utils.py	2003-05-30 14:58:41.000000000 +0200
+@@ -9,7 +9,7 @@
+ import os,dircache
+ import mp3
+ 
+-version = "1.2.0-hyriand-4"
++version = "1.2.0-hyriand-5"
+ 
+ def getServerList(url):
+         """ Parse server text file from http://www.slsk.org and 
+@@ -273,6 +273,7 @@
+             ret = ret + r.strip()
+             stdin.close()
+             stdout.close()
++            os.wait()
+         else:
+             ret = ret + alias[i]
+             i = i + 1
+diff -rNu3 slsk-tmp1/pysoulseek/wxgui/chat.py slsk-tmp2/pysoulseek/wxgui/chat.py
+--- slsk-tmp1/pysoulseek/wxgui/chat.py	2003-05-30 14:58:41.000000000 +0200
++++ slsk-tmp2/pysoulseek/wxgui/chat.py	2003-05-30 14:58:41.000000000 +0200
+@@ -224,7 +224,8 @@
+     def SayChatRoom(self,msg,text):
+         self.CreateRoomWindow(msg.room)
+         self.joinedrooms[msg.room].SayChatRoom(msg,text)
+-	if text.find(self.frame.np.config.sections["server"]["login"])>=0:
++        login = self.frame.np.config.sections["server"]["login"]
++	if msg.user != login and text.find(login)>=0:
+ 	    self.frame.OnPageUpdated(self.parent, True)
+             self.frame.SetTitle("(*) PySoulSeek %s" % version)
+ 	else:
+diff -rNu3 slsk-tmp1/pysoulseek/wxgui/configwindow.py slsk-tmp2/pysoulseek/wxgui/configwindow.py
+--- slsk-tmp1/pysoulseek/wxgui/configwindow.py	2003-05-30 14:58:41.000000000 +0200
++++ slsk-tmp2/pysoulseek/wxgui/configwindow.py	2003-05-30 14:58:41.000000000 +0200
+@@ -249,8 +249,7 @@
+         self.uploadlimit = wxTextCtrl(self, -1, size=wxSize(30,25))
+         self.limittransfer = wxRadioButton(self, -1, "per transfer", style=wxRB_GROUP)
+         self.limittotal = wxRadioButton(self, -1, "total for all transfers")
+-	self.upload_use_width = wxRadioButton(self,-1,"upload speed exceeds ",style=wxRB_GROUP)
+-	self.upload_use_slots = wxRadioButton(self,-1,"number of uploads exceeds ")
++	self.upload_use_slots = wxCheckBox(self,-1,"Number of uploads exceeds ")
+ 	self.upslots = wxTextCtrl(self,-1,size=wxSize(30,25))
+ 	self.preferfriends = wxCheckBox(self, -1, "Let users in my list download first")
+ 	self.queuelimit = wxTextCtrl(self, -1, size=wxSize(30,25))
+@@ -262,8 +261,7 @@
+         EVT_BUTTON(self,self.uploaddirrescan.GetId(),self.OnUploadRescan)
+ 	EVT_CHECKBOX(self,self.sharedownloadctrl.GetId(),self.OnShareDownload)
+         EVT_CHECKBOX(self,self.useuploadlimit.GetId(),self.OnUseUploadLimit)
+-	EVT_RADIOBUTTON(self,self.upload_use_width.GetId(),self.OnUploadChoose)
+-	EVT_RADIOBUTTON(self,self.upload_use_slots.GetId(),self.OnUploadChoose)
++	EVT_CHECKBOX(self,self.upload_use_slots.GetId(),self.OnUploadChoose)
+ 
+ 	incompletesizer = wxBoxSizer(wxHORIZONTAL)
+         incompletesizer.Add(self.incompletedirctrl)
+@@ -275,7 +273,8 @@
+ 	
+ 	upslotssizer = wxBoxSizer(wxHORIZONTAL)
+ 	upslotssizer.Add(self.upload_use_slots)
+-	upslotssizer.Add(self.upslots)
++	upslotssizer.Add(self.upslots, flag=wxRIGHT, border=5)
++	upslotssizer.Add(wxStaticText(self, -1, "(NOT RECOMMENDED)"), flag=wxALIGN_CENTER)
+ 
+ 	uploadbuttonssizer = wxBoxSizer(wxVERTICAL)
+         uploadbuttonssizer.Add(self.uploaddiradd)
+@@ -288,7 +287,7 @@
+ 	uploadsizer.Add(uploadbuttonssizer)
+ 
+ 	bandwidthsizer = wxBoxSizer(wxHORIZONTAL)
+-	bandwidthsizer.Add(self.upload_use_width)
++	bandwidthsizer.Add(wxStaticText(self, -1, "Upload speed exceeds"), flag=wxALIGN_CENTER)
+ 	bandwidthsizer.Add(self.uploadbandwidth, flag=wxLEFT, border=10)
+ 	bandwidthsizer.Add(wxStaticText(self, -1, " KBytes/sec"),flag=wxALIGN_CENTER)
+ 
+@@ -388,12 +387,7 @@
+ 	self.sharedfiles,self.sharedfilesstreams,self.wordindex, self.fileindex,self.sharedmtimes = utils.rescandirs(shared, self.sharedmtimes, self.sharedfiles, self.sharedfilesstreams, wxYield)
+ 
+     def OnUploadChoose(self,event):
+-	if self.upload_use_width.GetValue():
+-	    self.upslots.Enable(False)
+-	    self.uploadbandwidth.Enable(True)
+-	else:
+-	    self.upslots.Enable(True)
+-	    self.uploadbandwidth.Enable(False)
++	self.upslots.Enable(self.upload_use_slots.GetValue())
+ 
+ class UserinfoPanel(wxPanel):
+     def __init__(self,parent):
+@@ -437,6 +431,7 @@
+ 	self.coloursearchnoqueue = ColourPicker(self, -1, "Without queue:")
+ 	self.coloursearchqueue = ColourPicker(self, -1, "With queue:")
+ 	self.decimalsep = wxComboBox(self, -1, style=wxCB_DROPDOWN|wxCB_READONLY, choices = ["<none>", ",", ".", "<space>"])
++	self.afterdownload = wxTextCtrl(self, -1)
+ 
+ 	uisizer=wxStaticBoxSizer(wxStaticBox(self,-1,"Colours:"),wxVERTICAL)
+ 	uisizer.Add(wxStaticText(self,-1,"Chat colours:"), flag=wxLEFT|wxTOP, border = 10)
+@@ -456,7 +451,12 @@
+ 	decimalsepsizer = wxBoxSizer(wxHORIZONTAL)
+ 	decimalsepsizer.Add(wxStaticText(self, -1, "Decimal separator:"), flag=wxALIGN_CENTER|wxRIGHT, border = 5)
+ 	decimalsepsizer.Add(self.decimalsep)
+-	uisizer.Add(decimalsepsizer, flag=wxTOP|wxLEFT, border=10)
++	uisizer.Add(decimalsepsizer, flag=wxTOP|wxLEFT|wxBOTTOM, border=10)
++	
++	commandsizer = wxBoxSizer(wxVERTICAL)
++	commandsizer.Add(wxStaticText(self, -1, "Run command after download finishes ($ for filename):"))
++	commandsizer.Add(self.afterdownload, flag=wxEXPAND)
++	uisizer.Add(commandsizer, flag=wxALL|wxEXPAND, border=10)
+ 	
+ 	self.SetSizer(uisizer)
+ 	self.SetAutoLayout(True)
+@@ -542,7 +542,7 @@
+ 	nb.AddPage(self.serverpanel,"Server")
+ 	nb.AddPage(self.transferspanel,"Transfers")
+ 	nb.AddPage(self.userinfopanel,"Personal info")
+-	nb.AddPage(self.uipanel,"Interface")
++	nb.AddPage(self.uipanel,"Bloat")
+ 	nb.AddPage(self.miscpanel,"Miscellaneous")
+ 
+ 
+@@ -641,11 +641,10 @@
+ 	if transfers["uploadslots"] is not None:
+ 	    self.transferspanel.upslots.SetValue(str(transfers["uploadslots"]))
+ 	if transfers["useupslots"] is not None:
+-	    if transfers["useupslots"]:
+-		self.transferspanel.upload_use_slots.SetValue(True);
+-	    else:
+-		self.transferspanel.upload_use_width.SetValue(True);
++	    self.transferspanel.upload_use_slots.SetValue(transfers["useupslots"]);
+         self.transferspanel.OnUploadChoose(None)
++        if transfers["afterfinish"] is not None:
++            self.uipanel.afterdownload.SetValue(transfers["afterfinish"])
+ 	if userinfo["descr"] is not None:
+ 	    self.userinfopanel.descr.SetValue(eval(userinfo["descr"]))
+ 	if userinfo["pic"] is not None:
+@@ -751,6 +750,7 @@
+ 		"uploadbandwidth":uploadbandwidth, \
+ 		"uploadslots":uploadslots, \
+ 		"useupslots":useupslots, \
++		"afterfinish":encode(self.uipanel.afterdownload.GetValue()), \
+ 		"preferfriends":encode(self.transferspanel.preferfriends.GetValue()), \
+ 		"uselimit":encode(self.transferspanel.useuploadlimit.GetValue()), \
+ 		"usecustomban":encode(self.miscpanel.usecustomban.GetValue()), \

@@ -1,0 +1,33 @@
+diff -rNu3 slsk-tmp1/pysoulseek/transfers.py slsk-tmp2/pysoulseek/transfers.py
+--- slsk-tmp1/pysoulseek/transfers.py	2003-05-19 16:08:31.000000000 +0200
++++ slsk-tmp2/pysoulseek/transfers.py	2003-05-19 16:08:31.000000000 +0200
+@@ -459,8 +459,6 @@
+ 
+ 	downloaddir = self.eventprocessor.config.sections["transfers"]["downloaddir"]
+ 	incompletedir = self.eventprocessor.config.sections["transfers"]["incompletedir"]
+-	if not incompletedir:
+-		incompletedir = downloaddir
+ 
+ 	for i in self.downloads:
+ 	    if msg.req == i.req and i.conn is None and i.size is not None:
+@@ -468,6 +466,8 @@
+ 		i.req = None
+ 		if i.transfertimer is not None:
+                     i.transfertimer.cancel()
++                if not incompletedir:
++                    incompletedir = os.path.join(downloaddir, i.path)
+ 		try:
+ 		    if not os.access(incompletedir,os.F_OK):
+ 		        os.makedirs(incompletedir)
+diff -rNu3 slsk-tmp1/pysoulseek/utils.py slsk-tmp2/pysoulseek/utils.py
+--- slsk-tmp1/pysoulseek/utils.py	2003-05-19 16:08:31.000000000 +0200
++++ slsk-tmp2/pysoulseek/utils.py	2003-05-19 16:08:31.000000000 +0200
+@@ -9,7 +9,7 @@
+ import os,dircache
+ import mp3
+ 
+-version = "1.2.0-hyriand-2"
++version = "1.2.0-hyriand-2.2"
+ 
+ def getServerList(url):
+         """ Parse server text file from http://www.slsk.org and 

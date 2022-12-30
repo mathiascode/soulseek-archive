@@ -1,0 +1,537 @@
+diff -ru3 pyslsk-0.4.11/pysoulseek/config.py slsk-tmp/pysoulseek/config.py
+--- pyslsk-0.4.11/pysoulseek/config.py	2003-01-15 21:04:17.000000000 +0100
++++ slsk-tmp/pysoulseek/config.py	2003-02-21 20:29:00.000000000 +0100
+@@ -26,7 +26,7 @@
+         self.filename = filename
+ 	self.parser = ConfigParser.ConfigParser()
+ 	self.parser.read([self.filename])
+-        self.sections = {"server":{"server":None,"login":None,"passw":None,"enc":"ascii","userlist":[],"autojoin":["pyslsk"]},"transfers":{"downloaddir":None,"sharedownloaddir":1,"shared":None,"uploadbandwidth":100,"downloads":[],"sharedfiles":{},"sharedfilesstreams":{}},"userinfo":{"descr":"''","pic":""},"logging":{"privatechat":0,"chatrooms":0}}
++        self.sections = {"server":{"server":None,"login":None,"passw":None,"enc":"ascii","userlist":[],"banlist":[],"autojoin":["pyslsk"]},"transfers":{"downloaddir":None,"sharedownloaddir":1,"shared":None,"uploadbandwidth":100,"uploadslots":3,"useupslots":0,"uploadlimit":100,"downloads":[],"sharedfiles":{},"sharedfilesstreams":{}},"userinfo":{"descr":"''","pic":""},"logging":{"privatechat":0,"chatrooms":0}}
+ 
+     def needConfig(self):
+ 	for i in self.sections.keys():
+@@ -39,7 +39,7 @@
+ 	for i in self.parser.sections():
+ 	    for j in self.parser.options(i):
+ 		val = self.parser.get(i,j, raw = 1)
+-		if j in ['server','shared','uploadbandwidth','downloads','sharedfiles','sharedownloaddir','userlist','autojoin','sharedfilesstreams','privatechat','chatrooms']:
++		if j in ['server','shared','uploadbandwidth','uploadslots','useupslots','uploadlimit','downloads','sharedfiles','sharedownloaddir','userlist','banlist','autojoin','sharedfilesstreams','privatechat','chatrooms']:
+ 		    try:
+ 		        self.sections[i][j] = eval(val)
+ 		    except:
+Only in slsk-tmp/pysoulseek: core.29337
+Only in slsk-tmp/pysoulseek: core.29433
+diff -ru3 pyslsk-0.4.11/pysoulseek/pysoulseek.py slsk-tmp/pysoulseek/pysoulseek.py
+--- pyslsk-0.4.11/pysoulseek/pysoulseek.py	2003-01-15 16:58:52.000000000 +0100
++++ slsk-tmp/pysoulseek/pysoulseek.py	2003-02-21 21:46:10.000000000 +0100
+@@ -52,7 +52,7 @@
+         self.config.readConfig()
+ 
+         self.queue = Queue.Queue(0)
+-        self.protothread = slskproto.SlskProtoThread(callback,self.queue)
++        self.protothread = slskproto.SlskProtoThread(callback,self.queue,self.config.sections["transfers"]["uploadlimit"])
+         self.serverconn = None
+         self.waitport = None
+         self.peerconns = []
+diff -ru3 pyslsk-0.4.11/pysoulseek/slskmessages.py slsk-tmp/pysoulseek/slskmessages.py
+--- pyslsk-0.4.11/pysoulseek/slskmessages.py	2003-01-01 02:58:55.000000000 +0100
++++ slsk-tmp/pysoulseek/slskmessages.py	2003-02-21 21:46:19.000000000 +0100
+@@ -871,4 +871,9 @@
+         msg = self.packObject(self.req)
+         return msg
+ 
++class SetUploadBandwidth(InternalMessage):
++    """ Sent when the upload bandwidth limit changes. """
++    def __init__(self, bandwidth = None):
++	self.bandwidth = bandwidth
++
+     
+diff -ru3 pyslsk-0.4.11/pysoulseek/slskproto.py slsk-tmp/pysoulseek/slskproto.py
+--- pyslsk-0.4.11/pysoulseek/slskproto.py	2003-01-15 20:43:44.000000000 +0100
++++ slsk-tmp/pysoulseek/slskproto.py	2003-02-21 21:39:51.000000000 +0100
+@@ -25,7 +25,7 @@
+ 	self.ibuf = ibuf
+ 	self.obuf = obuf
+ 	self.init = None
+-	self.lastwritelength = 10*1024
++#	self.lastwritelength = 10*1024
+ 	self.lastreadlength = 100*1024
+ 
+ class ServerConnection(Connection):
+@@ -78,7 +78,7 @@
+ 		TransferResponse:41,PlaceholdUpload:42,QueueUpload:43,
+ 		PlaceInQueue:44,UploadFailed:46,QueueFailed:50,PlaceInQueueRequest:51}
+ 
+-    def __init__(self, ui_callback, queue):
++    def __init__(self, ui_callback, queue, bandwidth):
+ 	""" ui_callback is a UI callback function to be called with messages 
+ 	list as a parameter. queue is Queue object that holds messages from UI
+ 	thread.
+@@ -86,6 +86,7 @@
+         threading.Thread.__init__(self) 
+         self._ui_callback = ui_callback
+         self._queue = queue
++	self._bandwidth = bandwidth
+         self._want_abort = 0
+ 	self._stopped = 0
+ 
+@@ -112,6 +113,34 @@
+ 	if listenport is not None:
+ 	    self.start()
+     
++    def _isUpload(self, conn):
++        return conn.__class__ is PeerConnection and conn.fileupl is not None
++
++    def _calcLimit(self, conns, i):
++	if self._bandwidth is None:
++	    return None
++	max = self._bandwidth * 1024.0
++	bw = uploads = 0.0
++	curtime = time.time()
++        for j in conns.values():
++            if not self._isUpload(j):
++		continue
++	    uploads = uploads + 1.0
++        if not hasattr(i, "starttime"):
++	    i.starttime = curtime
++	t = curtime - i.starttime
++	if t == 0:
++	    bw = 0
++	else:
++	    bw = i.fileupl.sentbytes / t
++	if uploads == 0:
++	    limit = max
++	else:
++	    limit = (max / uploads) - bw + 1024
++	if limit < 1024.0:
++	    return 0
++	return long(limit)
++
+     def run(self):
+ 	""" Actual networking loop is here."""
+ 	p = self._p
+@@ -123,7 +152,17 @@
+         while not self._want_abort:
+             if not queue.empty():
+ 		conns, connsinprogress, s = self.process_queue(queue, conns, connsinprogress,s)
+-	    outsock = [i for i in conns.keys() if len(conns[i].obuf) > 0 or (i is not s and conns[i].fileupl is not None)]
++	    outsocks = [i for i in conns.keys() if len(conns[i].obuf) > 0 or (i is not s and conns[i].fileupl is not None)]
++	    outsock = []
++	    self.limits = {}
++	    for i in outsocks:
++		if self._isUpload(conns[i]):
++		    limit = self._calcLimit(conns, conns[i])
++		    if limit is None or limit > 0:
++		        self.limits[i] = limit
++		        outsock.append(i)
++		else:
++		    outsock.append(i)
+ #	    print outsock
+ 	    try:
+             	input,output,exc = select.select(conns.keys()+connsinprogress.keys()+[p],connsinprogress.keys()+outsock,[],0.5)
+@@ -191,21 +230,28 @@
+ 
+ 
+     def writeData(self, s, conns, i):
++	if self.limits.has_key(i):
++	    limit = self.limits[i]
++	else:
++	    limit = None
++
+ 	conns[i].lastactive = time.time()
+ 	i.setblocking(0)
+-	bytes_send = i.send(conns[i].obuf)
++	if limit is None:
++	    bytes_send = i.send(conns[i].obuf)
++	else:
++	    bytes_send = i.send(conns[i].obuf[:limit])
+ 	i.setblocking(1)
+-	bufsize = len(conns[i].obuf)
+ 	conns[i].obuf = conns[i].obuf[bytes_send:]
+-	if bufsize == bytes_send and bufsize > 0:
+-	    conns[i].lastwritelength = conns[i].lastwritelength * 2
+ 	if i is not s:
+ 	    if conns[i].fileupl is not None and conns[i].fileupl.offset is not None:
+ 	        conns[i].fileupl.sentbytes = conns[i].fileupl.sentbytes + bytes_send
+ 		try:
+ 		    if conns[i].fileupl.offset + conns[i].fileupl.sentbytes + len(conns[i].obuf) < conns[i].fileupl.size:
+-			read = conns[i].fileupl.file.read(conns[i].lastwritelength)
+-			conns[i].obuf = conns[i].obuf + read
++			bytestoread = bytes_send*2-len(conns[i].obuf)+10*1024
++			if bytestoread > 0:
++			    read = conns[i].fileupl.file.read(bytestoread)
++			    conns[i].obuf = conns[i].obuf + read
+ 		except:
+ 		    self._ui_callback([FileError(conns[i],conns[i].fileupl.file)])
+ 				
+@@ -406,6 +452,8 @@
+ 		    self._ui_callback([DownloadFile(msgObj.conn,0,msgObj.file)])
+ 		elif msgObj.__class__ is UploadFile and msgObj.conn in conns.keys():
+ 		    conns[msgObj.conn].fileupl = msgObj
++		elif msgObj.__class__ is SetUploadBandwidth:
++		    self._bandwidth = msgObj.bandwidth
+ 	if needsleep:
+ 	    time.sleep(1)
+ 	    
+diff -ru3 pyslsk-0.4.11/pysoulseek/transfers.py slsk-tmp/pysoulseek/transfers.py
+--- pyslsk-0.4.11/pysoulseek/transfers.py	2003-01-15 21:03:17.000000000 +0100
++++ slsk-tmp/pysoulseek/transfers.py	2003-02-21 23:58:02.000000000 +0100
+@@ -235,7 +235,9 @@
+ 		response = slskmessages.TransferResponse(conn,0,reason = "Cancelled", req = msg.req)
+ 		self.eventprocessor.logMessage("Denied file request: "+str(vars(msg)),1)
+ 	else:
+-	    if not self.fileIsShared(msg.file):
++	    if user in self.eventprocessor.config.sections["server"]["banlist"]:
++	        response = slskmessages.TransferResponse(conn,0,reason = "Banned",req=msg.req)
++	    elif not self.fileIsShared(msg.file):
+ 		response = slskmessages.TransferResponse(conn,0,reason = "File not shared", req = msg.req)
+ 	    elif self.userTransfers(user) or self.bandwidthLimitReached() or self.transferNegotiating():
+ 		response = slskmessages.TransferResponse(conn,0,reason = "Queued", req = msg.req)
+@@ -304,13 +306,21 @@
+ 
+     def bandwidthLimitReached(self):
+ 	maxbandwidth = self.eventprocessor.config.sections["transfers"]["uploadbandwidth"]
++	maxslots = self.eventprocessor.config.sections["transfers"]["uploadslots"]
++	useupslots = self.eventprocessor.config.sections["transfers"]["useupslots"]
+ 	bandwidth = 0
++	uploads = 0
+ 	curtime = time.time()
+ 	for i in self.uploads:
+ 	    if i.conn is not None and i.speed is not None:
+ 		bandwidth = bandwidth + i.speed
++		uploads = uploads + 1
+ #	self.eventprocessor.logMessage("%i %i " %(bandwidth, maxbandwidth),1)
+-	if bandwidth > maxbandwidth:
++
++	if useupslots:
++	    if uploads >= maxslots:
++		return 1
++	elif bandwidth > maxbandwidth:
+ 	    return 1
+ 	return 0
+ 
+@@ -505,6 +515,13 @@
+ 		if needupdate:
+                     self.uploadspanel.update()
+ 
++    def abortUserUploads(self, user):
++    	list = [i for i in self.uploads if i.user == user]
++        for upload in list:
++            self.AbortTransfer(upload)
++        if self.uploadspanel is not None:
++	    self.uploadspanel.ClearByUser(user)
++
+     def checkUploadQueue(self):
+ 	if self.bandwidthLimitReached() or self.transferNegotiating():
+ 	    return
+diff -ru3 pyslsk-0.4.11/pysoulseek/wxgui/chat.py slsk-tmp/pysoulseek/wxgui/chat.py
+--- pyslsk-0.4.11/pysoulseek/wxgui/chat.py	2003-01-15 21:04:17.000000000 +0100
++++ slsk-tmp/pysoulseek/wxgui/chat.py	2003-02-21 21:14:24.000000000 +0100
+@@ -326,7 +326,9 @@
+         addtolistID=wxNewId()
+         self.menu.Append(addtolistID, 'Add to User List')
+         EVT_MENU(self,addtolistID, self.OnAddToList)
+-
++        banuserID=wxNewId()
++	self.menu.Append(banuserID, "Ban this user")
++	EVT_MENU(self,banuserID, self.OnBanUser)
+ 
+         EVT_RIGHT_UP(self,self.OnRightUp)
+ 
+@@ -355,6 +357,9 @@
+     def OnAddToList(self, event):
+ 	self.parent.frame.AddToList(self.focuseduser)
+ 
++    def OnBanUser(self, event):
++    	self.parent.frame.BanUser(self.focuseduser)
++
+ 
+     def OnGetItemText(self, item, col):
+         username =  self.parent.userslist[item]
+diff -ru3 pyslsk-0.4.11/pysoulseek/wxgui/configwindow.py slsk-tmp/pysoulseek/wxgui/configwindow.py
+--- pyslsk-0.4.11/pysoulseek/wxgui/configwindow.py	2003-01-15 21:04:17.000000000 +0100
++++ slsk-tmp/pysoulseek/wxgui/configwindow.py	2003-02-22 00:54:34.000000000 +0100
+@@ -1,3 +1,4 @@
++
+ # Copyright (c) 2001-2002 Alexander Kanavin. All rights reserved.
+ 
+ """
+@@ -10,6 +11,7 @@
+ import os,stat
+ from pysoulseek import mp3
+ from pysoulseek import utils
++from sortablelist import sortableListCtrl
+ 
+ from wxPython.wx import *
+ 
+@@ -31,6 +33,57 @@
+     def OnGetItemImage(self,item):
+ 	return -1
+ 
++class UserList(wxPanel):
++    def __init__(self, parent, id, size, label):
++	wxPanel.__init__(self, parent, id, size=size)
++	self.label = wxStaticText(self, -1, label)
++	self.listbox = wxListBox(self, -1, style=wxLB_EXTENDED)
++	self.removeButton = wxButton(self, -1, "Remove")
++	self.addButton = wxButton(self, -1, "Add...")
++	self.clearButton = wxButton(self, -1, "Clear")
++
++	EVT_BUTTON(self, self.clearButton.GetId(), self.OnClear)
++	EVT_BUTTON(self, self.removeButton.GetId(), self.OnRemove)
++	EVT_BUTTON(self, self.addButton.GetId(), self.OnAdd)
++
++	sizer = wxBoxSizer(wxVERTICAL)
++	sizer.Add(self.label)
++	sizer.Add(self.listbox, 1, flag=wxEXPAND)
++	sizer.Add(self.removeButton, flag=wxEXPAND)
++	sizer.Add(self.clearButton, flag=wxEXPAND)
++	sizer.Add(self.addButton, flag=wxEXPAND|wxTOP, border=10)
++	self.SetSizer(sizer)
++	self.SetAutoLayout(true)
++	sizer.Fit(self)
++	
++    def OnClear(self,event):
++        self._list = []
++        self.listbox.Set(self._list)
++
++    def OnRemove(self,event):
++        sel = self.listbox.GetSelections()
++        list = self._list[:]
++        for item in sel:
++            self._list.remove(list[item])
++        self.listbox.Set(self._list)
++
++    def OnAdd(self,event):
++	dlg = wxTextEntryDialog(NULL, "Username:", caption = "Add user to list")
++	if (dlg.ShowModal() == wxID_OK):
++	    user = dlg.GetValue()
++	    if user and not user in self._list:
++		self._list.append(user)
++		self.setList(self._list)
++	dlg.Destroy()
++
++    def getList(self):
++        return self._list
++
++    def setList(self, list):
++        self._list = list[:]
++        self._list.sort()
++        self.listbox.Set(self._list)
++
+ class ServerChoose(wxDialog):
+     """ This class defines a servers list window that is used to let user
+ 	select one of the official servers from the list """
+@@ -115,7 +168,11 @@
+ 
+ 	self.downloaddirctrl = wxTextCtrl(transferspanel,-1,size=wxSize(250, 25))
+ 	self.uploaddirsctrl = wxListBox(transferspanel, -1, size=wxSize(250,100))
++	self.upload_use_width = wxRadioButton(transferspanel,-1,"upload speed exceeds ",style=wxRB_GROUP)
++	self.upload_use_slots = wxRadioButton(transferspanel,-1,"number of uploads exceeds ")
+ 	self.uploadbandwidth = wxTextCtrl(transferspanel,-1,size=wxSize(30, 25))
++	self.upslots = wxTextCtrl(transferspanel,-1,size=wxSize(30,25))
++	self.uploadlimit = wxTextCtrl(transferspanel,-1,size=wxSize(30, 25))
+ 	self.downloaddirchoose = wxButton(transferspanel, -1, "Choose...")
+ 	self.sharedownloadctrl = wxCheckBox(transferspanel, -1, "Share download directory")
+ 	self.uploaddiradd = wxButton(transferspanel, -1, "Add...")
+@@ -126,6 +183,8 @@
+ 	EVT_BUTTON(self,self.uploaddirrem.GetId(),self.OnUploadRem)
+         EVT_BUTTON(self,self.uploaddirrescan.GetId(),self.OnUploadRescan)
+ 	EVT_CHECKBOX(self,self.sharedownloadctrl.GetId(),self.OnShareDownload)
++	EVT_RADIOBUTTON(self,self.upload_use_width.GetId(),self.OnUploadChoose)
++	EVT_RADIOBUTTON(self,self.upload_use_slots.GetId(),self.OnUploadChoose)
+ 
+ 	downloadsizer = wxBoxSizer(wxHORIZONTAL)
+         downloadsizer.Add(self.downloaddirctrl)
+@@ -141,10 +200,20 @@
+ 	uploadsizer.Add(uploadbuttonssizer)
+ 
+ 	bandwidthsizer = wxBoxSizer(wxHORIZONTAL)
+-	bandwidthsizer.Add(wxStaticText(transferspanel, -1, "upload speed exceeds "),flag=wxALIGN_CENTER)
++	bandwidthsizer.Add(self.upload_use_width)
++#	bandwidthsizer.Add(wxStaticText(transferspanel, -1, "upload speed exceeds "),flag=wxALIGN_CENTER)
+ 	bandwidthsizer.Add(self.uploadbandwidth)
+ 	bandwidthsizer.Add(wxStaticText(transferspanel, -1, " KBytes/sec"),flag=wxALIGN_CENTER)
++
++	upslotssizer = wxBoxSizer(wxHORIZONTAL)
++	upslotssizer.Add(self.upload_use_slots)
++	upslotssizer.Add(self.upslots)
+ 	
++	limitsizer = wxBoxSizer(wxHORIZONTAL)
++	limitsizer.Add(wxStaticText(transferspanel, -1, "Limit upload bandwidth to "), flag=wxALIGN_CENTER)
++	limitsizer.Add(self.uploadlimit)
++	limitsizer.Add(wxStaticText(transferspanel, -1, " KBytes/sec"), flag=wxALIGN_CENTER)
++
+ 	transferssizer = wxStaticBoxSizer(wxStaticBox(transferspanel,-1,"Transfers settings:"),wxVERTICAL)
+ 	transferssizer.Add(wxStaticText(transferspanel, -1, "Download directory:"),flag=wxTOP|wxLEFT, border = 10)
+ 	transferssizer.Add(downloadsizer,flag=wxLEFT|wxRIGHT, border = 10)
+@@ -152,7 +221,9 @@
+ 	transferssizer.Add(wxStaticText(transferspanel, -1, "Shared directories:"),flag=wxTOP|wxLEFT, border = 10)
+ 	transferssizer.Add(uploadsizer, flag=wxLEFT|wxRIGHT, border = 10)
+ 	transferssizer.Add(wxStaticText(transferspanel, -1, "Locally queue remote requests if current"),flag=wxTOP|wxLEFT, border = 10)
+-	transferssizer.Add(bandwidthsizer,flag=wxBOTTOM|wxLEFT, border = 10)
++	transferssizer.Add(bandwidthsizer,flag=wxLEFT, border = 10)
++	transferssizer.Add(upslotssizer,flag=wxBOTTOM|wxLEFT, border = 10)
++	transferssizer.Add(limitsizer, flag=wxBOTTOM|wxLEFT, border = 10)
+ 
+ 	self.descr = wxTextCtrl(userinfopanel,-1,size=wxSize(250,100),style = wxTE_MULTILINE|wxTE_RICH)
+ 	self.pic = wxTextCtrl(userinfopanel,-1,size=wxSize(250, 25))
+@@ -175,6 +246,8 @@
+         miscsizer.Add(self.loggingprivatectrl);
+         self.loggingchatctrl = wxCheckBox(miscpanel, -1, "Log chatrooms by default")
+         miscsizer.Add(self.loggingchatctrl);
++	self.banlist = UserList(miscpanel, -1, wxSize(150,0), "Banned users")
++	miscsizer.Add(self.banlist, 1, flag=wxALIGN_CENTER|wxTOP|wxBOTTOM, border=15)
+ 
+ 	serverpanel.SetSizer(serversizer)
+ 	serverpanel.SetAutoLayout(true)
+@@ -260,6 +333,14 @@
+             if pic is not None:
+                 self.pic.SetValue(pic)
+ 
++    def OnUploadChoose(self,event):
++	if self.upload_use_width.GetValue():
++	    self.upslots.Enable(false)
++	    self.uploadbandwidth.Enable(true)
++	else:
++	    self.upslots.Enable(true)
++	    self.uploadbandwidth.Enable(false)
++
+     def SetSettings(self, config):
+ 	server = config.sections["server"]
+ 	transfers = config.sections["transfers"]
+@@ -273,6 +354,8 @@
+ 	    self.passwctrl.SetValue(server["passw"])
+ 	if server["enc"] is not None:
+ 	    self.enc.SetValue(server["enc"])
++	if server["banlist"] is not None:
++	    self.banlist.setList(server["banlist"])
+ 	if transfers["downloaddir"] is not None:
+ 	    self.downloaddirctrl.SetValue(transfers["downloaddir"])
+ 	if transfers["shared"] is not None:
+@@ -285,6 +368,16 @@
+ 	    self.sharedfilesstreams = transfers["sharedfilesstreams"]
+ 	if transfers["uploadbandwidth"] is not None:
+ 	    self.uploadbandwidth.SetValue(str(transfers["uploadbandwidth"]))
++	if transfers["uploadslots"] is not None:
++	    self.upslots.SetValue(str(transfers["uploadslots"]))
++	if transfers["useupslots"] is not None:
++	    if transfers["useupslots"]:
++		self.upload_use_slots.SetValue(true);
++	    else:
++		self.upload_use_width.SetValue(true);
++	    self.OnUploadChoose(None)
++	if transfers["uploadlimit"] is not None:
++	    self.uploadlimit.SetValue(str(transfers["uploadlimit"]))
+ 	if transfers["sharedownloaddir"] is not None:
+ 	    self.sharedownloadctrl.SetValue(transfers["sharedownloaddir"])
+ 	if userinfo["descr"] is not None:
+@@ -313,8 +406,17 @@
+ 	    uploadbandwidth = string.atoi(self.uploadbandwidth.GetValue())
+ 	except:
+ 	    uploadbandwidth = None
++	try:
++	    uploadslots = string.atoi(self.upslots.GetValue())
++	except:
++	    uploadslots = None
++	useupslots = self.upload_use_slots.GetValue()
++	try:
++	    uploadlimit = string.atoi(self.uploadlimit.GetValue())
++	except:
++	    uploadlimit = None
+             
+-	return {"server":{"server":server, "login":self.loginctrl.GetValue(), "passw":self.passwctrl.GetValue(),"enc":self.enc.GetValue()},"transfers":{"downloaddir":self.downloaddirctrl.GetValue(), "shared":shared, "sharedfiles":self.sharedfiles,"sharedfilesstreams":self.sharedfilesstreams,"uploadbandwidth":uploadbandwidth,"sharedownloaddir":self.sharedownloadctrl.GetValue()},"userinfo":{"descr":self.descr.GetValue().__repr__(),"pic":self.pic.GetValue()},"logging":{"privatechat":self.loggingprivatectrl.GetValue(),"chatrooms":self.loggingchatctrl.GetValue()}}
++	return {"server":{"server":server, "login":self.loginctrl.GetValue(), "passw":self.passwctrl.GetValue(),"enc":self.enc.GetValue(),"banlist":self.banlist.getList()},"transfers":{"downloaddir":self.downloaddirctrl.GetValue(), "shared":shared,"sharedfiles":self.sharedfiles,"sharedfilesstreams":self.sharedfilesstreams,"uploadbandwidth":uploadbandwidth,"uploadslots":uploadslots,"useupslots":useupslots,"uploadlimit":uploadlimit,"sharedownloaddir":self.sharedownloadctrl.GetValue()},"userinfo":{"descr":self.descr.GetValue().__repr__(),"pic":self.pic.GetValue()},"logging":{"privatechat":self.loggingprivatectrl.GetValue(),"chatrooms":self.loggingchatctrl.GetValue()}}
+ 
+ 
+ 
+diff -ru3 pyslsk-0.4.11/pysoulseek/wxgui/frame.py slsk-tmp/pysoulseek/wxgui/frame.py
+--- pyslsk-0.4.11/pysoulseek/wxgui/frame.py	2003-01-15 19:53:26.000000000 +0100
++++ slsk-tmp/pysoulseek/wxgui/frame.py	2003-02-21 23:43:31.000000000 +0100
+@@ -184,7 +184,7 @@
+ 	if self.np.transfers is not None:
+             self.np.transfers.AbortTransfers()
+ 	    self.np.config.sections["transfers"]["downloads"] = self.np.transfers.GetDownloads()
+-        self.np.config.setConfig({"transfers":{"downloads":self.np.config.sections["transfers"]["downloads"],"sharedfiles":self.np.config.sections["transfers"]["sharedfiles"],"sharedfilesstreams":self.np.config.sections["transfers"]["sharedfilesstreams"]},"server":{"userlist":[i[0] for i in self.userlist],"autojoin":self.np.config.sections["server"]["autojoin"]}})
++        self.np.config.setConfig({"transfers":{"downloads":self.np.config.sections["transfers"]["downloads"],"sharedfiles":self.np.config.sections["transfers"]["sharedfiles"],"sharedfilesstreams":self.np.config.sections["transfers"]["sharedfilesstreams"]},"server":{"userlist":[i[0] for i in self.userlist],"banlist":self.np.config.sections["server"]["banlist"],"autojoin":self.np.config.sections["server"]["autojoin"]}})
+ 	self.np.config.writeConfig()
+         self.np.queue.put(slskmessages.ConnClose(self.np.serverconn)) 
+ 	self.np.protothread.abort()
+@@ -232,6 +232,7 @@
+ 	    self.np.config.setConfig(self.configwindow.GetSettings())
+ 	    if self.np.transfers is not None:
+ 		self.np.sendNumSharedFoldersFiles()	    
++	    self.np.queue.put(slskmessages.SetUploadBandwidth(self.np.config.sections["transfers"]["uploadlimit"]))
+ 	    self.np.config.writeConfig()
+ 	    if not self.np.config.needConfig():
+ 	        if not self.mainmenu.IsEnabled(self.disconnectID):
+@@ -299,6 +300,10 @@
+             self.np.queue.put(slskmessages.GetUserStatus(user))
+             self.userlist.append([user,0])
+ 
++    def BanUser(self,user):
++    	if user not in self.np.config.sections["server"]["banlist"]:
++    	    self.np.config.sections["server"]["banlist"].append(user)
++	    self.np.transfers.abortUserUploads(user)
+ 
+     def GetUserStatus(self,msg):
+ 	for i in self.userlist:
+diff -ru3 pyslsk-0.4.11/pysoulseek/wxgui/transfers.py slsk-tmp/pysoulseek/wxgui/transfers.py
+--- pyslsk-0.4.11/pysoulseek/wxgui/transfers.py	2002-11-15 23:55:25.000000000 +0100
++++ slsk-tmp/pysoulseek/wxgui/transfers.py	2003-02-21 23:51:15.000000000 +0100
+@@ -101,6 +101,9 @@
+         addtolistID=wxNewId()
+         self.menu.Append(addtolistID, 'Add to User List')
+         EVT_MENU(self,addtolistID, self.OnAddToList)
++	banuserID=wxNewId()
++	self.menu.Append(banuserID, "Ban this user")
++	EVT_MENU(self,banuserID, self.OnBanUser)
+ 
+ 	self.menu.AppendSeparator()
+ 
+@@ -172,6 +175,10 @@
+ 	user = self.list[self.item].user
+ 	self.eventprocessor.frame.AddToList(user)	
+ 
++    def OnBanUser(self,event):
++    	user = self.list[self.item].user
++    	self.eventprocessor.frame.BanUser(user)
++
+     def OnAbort(self, event):
+ 	""" Abort all selected transfers """
+ 	item = -1
+@@ -255,4 +262,10 @@
+         self.listctrl.UnselectAll()
+         self.update()
+ 
++    def ClearByUser(self, user):
++        for i in self.list[:]:
++            if i.user == user:
++                self.list.remove(i)
++        self.listctrl.UnselectAll()
++        self.update()
+ 
+diff -ru3 pyslsk-0.4.11/pysoulseek/wxgui/userinfobrowse.py slsk-tmp/pysoulseek/wxgui/userinfobrowse.py
+--- pyslsk-0.4.11/pysoulseek/wxgui/userinfobrowse.py	2003-01-10 12:10:15.000000000 +0100
++++ slsk-tmp/pysoulseek/wxgui/userinfobrowse.py	2003-02-21 21:28:11.000000000 +0100
+@@ -311,6 +311,10 @@
+ 	self.treemenu.Append(addtolistID, 'Add to User List')
+ 	self.listmenu.Append(addtolistID, 'Add to User List')
+ 	EVT_MENU(self,addtolistID, self.OnAddToList)
++	banuserID=wxNewId()
++	self.treemenu.Append(banuserID, "Ban this user")
++	self.listmenu.Append(banuserID, "Ban this user")
++	EVT_MENU(self,banuserID, self.OnBanUser)
+ 
+         EVT_RIGHT_UP(self.listctrl,self.OnRightUpList)
+         EVT_RIGHT_UP(self.tree, self.OnRightUpTree)
+@@ -342,6 +346,9 @@
+     def OnAddToList(self, event):
+ 	self.frame.AddToList(self.user)
+ 
++    def OnBanUser(self, event):
++    	self.frame.BanUser(self.user)
++
+     def ShowInfo(self,msg):
+         """ We got the filelist, now set up the directory tree and sort it."""
+         self.conn = None

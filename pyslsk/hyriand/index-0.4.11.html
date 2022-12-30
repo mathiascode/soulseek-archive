@@ -1,0 +1,160 @@
+<html>
+<head>
+<title>Hyriand's UNOFFICIAL PySoulSeek patches</title>
+</head>
+<body>
+<center><h2>Hyriand's UNOFFICIAL PySoulSeek patches</h2>
+Welcome to this page. Here you can download my unofficial PySoulSeek patches.
+Please remember that I am not related to the
+<a href="http://www.sensi.org/~ak/pyslsk/" target="_blank">official PySoulSeek
+project</a>. Also, I cannot be held responsible for any damage these patches
+(or anything else for that matter) inflict on you, your system, your files
+or whatever you want to blame me of.<br>
+&nbsp;<br>
+These patches are licensed under the GNU General Public License [<a
+href="http://www.gnu.org/licenses/gpl.html" target="_blank">HTML</a>] [<a
+href="http://www.gnu.org/licenses/gpl.txt" target="_blank">PlainText</a>]
+</center><br>
+<hr>
+&nbsp;<br>
+Latest official PySoulSeek release: <a href="pyslsk-0.4.11.tar.gz">0.4.11</a>
+(<a href="pyslsk-0.4.11-changelog" target="_blank">ChangeLog</a>)
+(locally mirrored)<br>
+&nbsp;<br>
+Latest <b>bundled patch-set</b>: <a href="slsk-bundled-v5.1.patch">version
+5.1</a>
+(contains both <a href="#slskul"><b>upload bandwidth limiter version 3</b></a>
+and <a href="#slskui"><b>user interface enhancements version 4.3</a></b>)<br>
+&nbsp;<br>
+<b>Incremental patches</b><br>
+<a href="slsk-bundled-v5-to-v5.1.patch">slsk-bundled-v5-to-v5.1.patch</a>
+(updates a pyslsk patched with bundled-patch version 5 to version 5.1)<br>
+<a href="slsk-bundled-v4-to-v5.patch">slsk-bundled-v4-to-v5.patch</a>
+(updates a pyslsk patched with bundled-patch version 4 to version 5)<br>
+<a href="slsk-bundled-v3-to-v4.patch">slsk-bundled-v3-to-v4.patch</a>
+(updates a pyslsk patched with bundled-patch version 3 to version 4)<br>
+<a href="slsk-bundled-v2-to-v3.patch">slsk-bundled-v2-to-v3.patch</a>
+(updates a pyslsk patched with bundled-patch version 2 to version 3)<br>
+<a href="slsk-bundled-v1.1-to-v2.patch">slsk-bundled-v1.1-to-v2.patch</a>
+(updates a pyslsk patched with bundled-patch version 1.1 to version 2)<br>
+<a href="slsk-bundled-v1-to-v2.patch">slsk-bundled-v1-to-v2.patch</a>
+(updates a pyslsk patched with bundled-patch version 1 to version 2)<br>
+&nbsp;<br>
+<hr>
+<a name="slskul">
+<h3>SLSK-UL: My PySoulSeek Upload Bandwidth Limiting Patch</h3>
+Latest release: <a href="slsk-ul-v3.patch">version 3</a><br>
+Changes in this version: added banning of users<br>
+&nbsp;<br>
+This patch adds additional options to the configuration screen (in the
+transfers tab) which allows you to control the maximum upload bandwidth
+used by PySoulSeek in KILO-BYTES (not bits) per second. The maximum upload
+speed per upload is the value you set divided by the number of uploads. The
+upload bandwidth limit can be altered during a transfer. It will also allow
+you to select a fixed number of upload slots instead of the automatic
+queueing which is used in the original PySoulSeek. It also implements a
+banning function.<br>
+&nbsp;<br>
+<hr>
+<a name="slskui">
+<h3>SLSK-UI: My PySoulSeek User Interface Enhancement Patch</h3>
+Latest release: <a href="slsk-ui-v4.3.patch">version 4.3</a><br>
+Changes in this version: Human readable sizes fixed, undocumented
+num-lock-turns-off-auto-completion feature removed<br>
+&nbsp;<br>
+This patch adds some additional features to the user interface of
+PySoulSeek. It is intended to increase the overall niftyness of the user
+interface :-)<br>&nbsp;<br>
+<b>Feature quicklist:</b>
+<ul>
+<li>(Partial) automatic nickname completion in the chat input field (press
+the Tab key)
+<li>Meta-commands in the (private) chat input field (see below)
+<li>Human readable sizes in the transfer windows (sizes shown in 2 decimal
+figures in Gb's, Mb's or Kb's)
+<li>An "Add to List" and a "Browse" button on the user info pages
+<li>Total upload/download speeds in the status bar
+</ul>
+&nbsp;<br>
+<b>Meta Commands</b><br>
+The slsk-ui patch implements a couple of new chat meta-commands. It's a bit
+like IRC but with specific SoulSeek commands. Some of them only work in
+chatrooms, others only in private chats and most of them work in both
+places (see the notes).
+&nbsp;<br>
+<table>
+<tr>
+ <th>command</th>
+ <th>arguments</th>
+ <th>explanation</th>
+ <th>notes</th>
+<tr>
+ <td width="100"><b>/add /ad</b></td>
+ <td width="200"><i>nickname</i></td>
+ <td>Add the specified user to your user list</td>
+ <td align="center"><b>1</b></td>
+</tr><tr>
+ <td><b>/away /a</b></td>
+ <td>&nbsp;</td>
+ <td>Toggles your away status</td>
+ <td align="center"><b>1</b></td>
+</tr><tr>
+ <td><b>/browse /b</b></td>
+ <td><i>username</i></td>
+ <td>Browse files of the specified user</td>
+ <td align="center"><b>1</b></td>
+</tr><tr>
+ <td><b>/close /c</b></td>
+ <td>&nbsp;</td>
+ <td>Closes the active private chat window</td>
+ <td align="center"><b>3</b></td>
+</tr><tr>
+ <td><b>/join /j</b></td>
+ <td><i>channel</i></td>
+ <td>Join the specified channel</td>
+ <td align="center"><b>2</b></td>
+</tr><tr>
+ <td><b>/leave /l</b></td>
+ <td><i>[channel]</i></td>
+ <td>Leave the current or specified channel (channel argument
+     is optional)</td>
+ <td align="center"><b>2</b></td>
+</tr><tr>
+ <td><b>/msg /m</b></td>
+ <td><i>username message</i></td>
+ <td>Open a private chat window to tje specified user and send a message.
+     Username argument can optionally be single or double quoted (for
+     nicknames with spaces in them)</td>
+ <td align="center"><b>2</b></td>
+</tr><tr>
+ <td><b>/part /p</b></td>
+ <td><i>[channel]</i></td>
+ <td>See <b>/leave</b></td>
+ <td align="center"><b>2</b></td>
+</tr><tr>
+ <td><b>/pm</b></td>
+ <td><i>username</i></td>
+ <td>Open a private chat window to the specified user (but don't send a
+     message, no need to quote the username if there are spaces in it)</td>
+ <td align="center"><b>2</b></td>
+</tr><tr>
+ <td><b>/quit /q</b></td>
+ <td>&nbsp;</td>
+ <td>Quit PySoulSeek</td>
+ <td align="center"><b>1</b></td>
+</tr><tr>
+ <td><b>/whois /w</b></td>
+ <td><i>username</i></td>
+ <td>View the user info of the specified user</td>
+ <td align="center"><b>2</b></td>
+</tr></table>
+<br>
+<b>Notes:</b><br>
+1) Works in both chatrooms and private chats (in private chats username
+arguments are optional)<br>
+2) Only works in chatrooms<br>
+3) Only works in private chats<br>
+<hr>
+<h6 align="right">(C) 2003, TheGraveyard.org</h6>
+</body>
+</html>

@@ -1,0 +1,299 @@
+diff -ru3 pyslsk-0.4.11/pysoulseek/wxgui/chat.py slsk-tmp/pysoulseek/wxgui/chat.py
+--- pyslsk-0.4.11/pysoulseek/wxgui/chat.py	2003-01-15 21:04:17.000000000 +0100
++++ slsk-tmp/pysoulseek/wxgui/chat.py	2003-02-02 17:41:01.000000000 +0100
+@@ -1,3 +1,4 @@
++import string
+ import time
+ from pysoulseek import slskproto
+ from pysoulseek import slskmessages
+@@ -423,7 +424,8 @@
+ 
+         chatpanel = wxPanel(splitter,-1)
+         self.chat = OutputWindow(chatpanel,-1,style = wxTE_MULTILINE|wxTE_READONLY|wxTE_RICH)
+-        self.mychatphrase = wxTextCtrl(chatpanel,-1, style = wxTE_PROCESS_ENTER)
++        self.mychatphrase = wxTextCtrl(chatpanel,-1, style = wxTE_PROCESS_ENTER|wxTE_PROCESS_TAB)
++	EVT_CHAR(self.mychatphrase, self.OnPhraseChar)
+ 
+         chatsizer = wxBoxSizer(wxVERTICAL)
+         chatsizer.Add(self.chat,1,wxEXPAND)
+@@ -458,9 +460,78 @@
+     def OnEnter(self, event):
+         """ Processes chat phrase that we entered. """
+         text = self.mychatphrase.GetLineText(0)
+-        self.queue.put(slskmessages.SayChatroom(self.room, self.frame.np.encodestring(text)))
++	s = text.split(" ", 1)
++	cmd = s[0]
++	if len(s) > 1:
++	    rest = s[1]
++	else:
++	    rest = ""
++	if cmd in ("/join", "/j"):
++	    if rest:
++	        self.queue.put(slskmessages.JoinRoom(rest))
++	elif cmd in ("/leave", "/part", "/l", "/p"):
++	    if rest:
++		self.queue.put(slskmessages.LeaveRoom(rest))
++	    else:
++		self.OnLeave(event)
++	elif cmd == "/pm":
++            if rest:
++                self.privatechat.SendMessage(text[4:])
++	elif cmd in ("/msg", "/m"):
++            if rest:
++	        if rest[0] == "'" or rest[0] == '"':
++		    quote = rest[0] + " "
++		    rest = rest[1:]
++	        else:
++		    quote = " "
++	        nick = msg = ""
++	        while len(rest):
++		    if quote and rest[:len(quote)] == quote:
++		        rest = rest[len(quote)-1:]
++		        quote = ""
++		    elif quote:
++		        nick = nick + rest[0]
++		    else:
++		        msg = msg + rest[0]
++		    rest = rest[1:]
++	        self.privatechat.SendMessage(nick, msg)
++	elif cmd in ("/away", "/a"):
++	    self.frame.OnAway(event)
++	elif cmd in ("/quit", "/q"):
++	    self.frame.Close()
++	    return
++	elif cmd in ("/add", "/ad"):
++	    if rest:
++	        self.frame.AddToList(rest)
++	elif cmd in ("/whois", "/w"):
++            if rest:
++                self.frame.np.ProcessRequestToPeer(rest, slskmessages.UserInfoRequest(None), self.frame.np.userinfo)
++	elif cmd in ("/browse", "/b"):
++	    if rest:
++                self.frame.np.ProcessRequestToPeer(rest, slskmessages.GetSharedFileList(None), self.frame.np.userbrowse)
++	else:
++            self.queue.put(slskmessages.SayChatroom(self.room, self.frame.np.encodestring(text)))
+         self.mychatphrase.Clear()
+ 
++    def OnPhraseChar(self, event):
++	if event.GetKeyCode() == WXK_TAB and not event.ControlDown() and not event.MetaDown() and not event.ShiftDown() and not event.AltDown():
++	    ip = self.mychatphrase.GetInsertionPoint()
++            part = self.mychatphrase.GetLineText(0)[:ip].split(" ")[-1]
++	    m = [i for i in self.users.keys() if i[:len(part)] == part and len(i) > len(part)]
++	    if len(m) == 0:
++		return
++	    elif len(m) == 1:
++		a = m[0]
++	    else:
++                c, a = len(m[0]), m[0]
++		for i in m:
++		    while i[:c] != a[:c] and c > 0:
++		        c = c - 1
++		    a = a[:c]
++	    self.mychatphrase.WriteText(a[len(part):])
++	else:
++	    event.Skip()
++
+     def OnLeave(self, event):
+ 	if self.room is not None:
+ 	    self.queue.put(slskmessages.LeaveRoom(self.room))
+@@ -585,7 +656,7 @@
+         if self.users[msg.user].logctrl.GetValue():
+             self.users[msg.user].logfile.write(str)
+ 
+-    def SendMessage(self, user):
++    def SendMessage(self, user, message = None):
+         """ Adds a notebook tab with a user's name on it, and private chat 
+         window inside the tab
+         """
+@@ -593,6 +664,8 @@
+             self.users[user] = PrivateChatWindow(self, -1, user)
+             self.AddPage(self.users[user],user)
+ 	    self.np.queue.put(slskmessages.GetUserStatus(user))
++	if message:
++	    self.users[user].SendMessage(message)
+ 
+     def GetUserStatus(self, msg):
+ 	if self.users.has_key(msg.user):
+@@ -662,9 +735,7 @@
+ 	if parent.GetPageCount() > 0:
+ 	    parent.SetSelection(0)
+ 
+-    def OnEnter(self, event):
+-        """ Sends our chat phrase and updates the window."""
+-        text = self.mychatphrase.GetLineText(0)
++    def SendMessage(self, text):
+ 	username = self.parent.np.config.sections["server"]["login"]
+         if text[:4] == "/me ":
+             str = "%s * %s %s\n" %(time.strftime("%c",time.localtime()),username,text[4:])
+@@ -675,10 +746,38 @@
+ 
+ 	self.AddText(str, color)
+         self.parent.queue.put(slskmessages.MessageUser(self.user, self.parent.np.encodestring(text)))
+-        self.mychatphrase.Clear()
+         if self.logctrl.GetValue():
+             self.logfile.write(str)
+ 
++    def OnEnter(self, event):
++        """ Sends our chat phrase and updates the window."""
++        text = self.mychatphrase.GetLineText(0)
++	s = text.split(" ", 1)
++	cmd = s[0]
++	if len(s) > 1:
++	    rest = s[1]
++	else:
++	    rest = ""
++	if not rest:
++	    rest = self.user
++	if cmd in ("/away", "/a"):
++	    self.parent.np.frame.OnAway(event)
++	elif cmd in ("/quit", "/q"):
++	    self.parent.np.frame.Close()
++	    return
++	elif cmd in ("/close", "/c"):
++	    self.OnClose(event)
++	    return
++	elif cmd in ("/add", "/ad"):
++	    self.parent.np.frame.AddToList(rest)
++	elif cmd in ("/whois", "/w"):
++            self.parent.np.ProcessRequestToPeer(rest, slskmessages.UserInfoRequest(None), self.parent.np.userinfo)
++	elif cmd in ("/browse", "/b"):
++            self.parent.np.ProcessRequestToPeer(rest, slskmessages.GetSharedFileList(None), self.parent.np.userbrowse)
++	else:
++            self.SendMessage(text)
++        self.mychatphrase.Clear()
++
+     def OnLogCheckClick(self, event):
+         """ This is called when the 'Log' checkbox is clicked """
+         if self.logctrl.GetValue() == 1:
+diff -ru3 pyslsk-0.4.11/pysoulseek/wxgui/frame.py slsk-tmp/pysoulseek/wxgui/frame.py
+--- pyslsk-0.4.11/pysoulseek/wxgui/frame.py	2003-01-15 19:53:26.000000000 +0100
++++ slsk-tmp/pysoulseek/wxgui/frame.py	2003-02-02 12:25:02.000000000 +0100
+@@ -72,7 +72,9 @@
+ 
+         EVT_CLOSE(self, self.OnCloseWindow)
+         self.Centre(wxBOTH)
+-        self.CreateStatusBar(1, wxST_SIZEGRIP)
++        self.CreateStatusBar(3, wxST_SIZEGRIP)
++	self.SetStatusWidths([-1, 100, 100])
++	self.updateBandwidth()
+ 
+ 	self.configwindow = ConfigWindow(self, -1, "Settings")
+ 
+@@ -146,6 +148,22 @@
+ 	if not self.np.config.needConfig():
+ 	    self.OnConnect(None)
+ 
++    def updateBandwidth(self):
++	def _calc(l):
++	    bandwidth = 0.0
++	    for i in l:
++		if i.conn is not None and i.speed is not None:
++		    bandwidth = bandwidth + i.speed
++	    return bandwidth
++
++	if self.np.transfers is not None:
++	    down = _calc(self.np.transfers.downloads)
++	    up = _calc(self.np.transfers.uploads)
++	else:
++	    down = up = 0.0
++	self.SetStatusText("Down: %.1f KB/s" % down, 1)
++	self.SetStatusText("Up: %.1f KB/s" % up, 2)
++
+     def getNotebook(self):
+ 	return notebook.IconNotebook(self.splitter2.panel, -1, style=wxCLIP_CHILDREN)
+     
+diff -ru3 pyslsk-0.4.11/pysoulseek/wxgui/transfers.py slsk-tmp/pysoulseek/wxgui/transfers.py
+--- pyslsk-0.4.11/pysoulseek/wxgui/transfers.py	2002-11-15 23:55:25.000000000 +0100
++++ slsk-tmp/pysoulseek/wxgui/transfers.py	2003-02-02 12:21:50.000000000 +0100
+@@ -41,9 +41,31 @@
+ 	if col == 1:
+ 	    return item.user
+ 	if col == 2:
+-	    return item.status
++	    try:
++		r = str(item.status)
++		s = int(item.status)
++		if s > 1024*1024*1024:
++		    r = "%.2f GB" % ((float(s) / (1024.0*1024.0*1024.0)))
++		elif s > 1024*1024:
++		    r = "%.2f MB" % ((float(s) / (1024.0*1024.0)))
++		elif s > 1024:
++		    r = "%.2f KB" % ((float(s) / 1024.0))
++		return r
++	    except:
++	        return item.status
+ 	if col == 3:
+-	    return item.size
++	    if item.size is not None:
++		r = str(item.size)
++		s = item.size
++		if s > 1024*1024*1024:
++		    r = "%.2f GB" % ((float(s) / (1024.0*1024.0*1024.0)))
++		elif s > 1024*1024:
++		    r = "%.2f MB" % ((float(s) / (1024.0*1024.0)))
++		elif s > 1024:
++		    r = "%.2f KB" % ((float(s) / 1024.0))
++		return r
++	    else:
++	        return None
+ 	if col == 4:
+             if item.speed is not None:
+ 	        return "%.1f" %(item.speed)
+@@ -133,6 +155,7 @@
+ 
+     def update(self):
+ 	""" Call this to make the transfer panel update the data."""
++	self.eventprocessor.frame.updateBandwidth()
+ 	self.listctrl.SetItemCount(len(self.list))
+ 
+     def OnRightUp(self, event):
+diff -ru3 pyslsk-0.4.11/pysoulseek/wxgui/userinfobrowse.py slsk-tmp/pysoulseek/wxgui/userinfobrowse.py
+--- pyslsk-0.4.11/pysoulseek/wxgui/userinfobrowse.py	2003-01-10 12:10:15.000000000 +0100
++++ slsk-tmp/pysoulseek/wxgui/userinfobrowse.py	2003-02-01 21:41:20.000000000 +0100
+@@ -69,6 +69,8 @@
+         self.close = wxButton(self, -1, "Close")
+ 	self.savepic = wxButton(self, -1, "Save pic")
+ 	self.savepic.Enable(0)
++	self.addtolist = wxButton(self, -1, "Add to List")
++	self.browse = wxButton(self, -1, "Browse")
+         self.descr = wxTextCtrl(self,-1,size=wxSize(250,100),style = wxTE_MULTILINE|wxTE_READONLY|wxTE_RICH)
+         self.infobox = wxStaticBoxSizer(wxStaticBox(self, -1, "Information:"),wxVERTICAL)
+         self.info = wxStaticText(self,-1,"\n\n\n")
+@@ -84,9 +86,16 @@
+ 	sizerlowh.Add(10,20,0,wxEXPAND)
+         sizerlowh.Add(self.close,0,wxEXPAND)
+ 
++	sizerbutts = wxBoxSizer(wxHORIZONTAL)
++	sizerbutts.Add(60,20,1,wxEXPAND)
++	sizerbutts.Add(self.addtolist, 0, wxEXPAND)
++	sizerbutts.Add(10,20,0,wxEXPAND)
++	sizerbutts.Add(self.browse, 0, wxEXPAND)
++
+         sizerv = wxBoxSizer(wxVERTICAL)
+         sizerv.Add(wxStaticText(self,-1, "Self-description:"))
+         sizerv.Add(self.descr,1,wxEXPAND)
++	sizerv.Add(sizerbutts,0,wxEXPAND)
+         sizerv.Add(self.infobox,0,wxEXPAND)
+ 
+         sizeruph = wxBoxSizer(wxHORIZONTAL)
+@@ -101,6 +110,8 @@
+         self.SetAutoLayout(true)
+         EVT_BUTTON(self,self.close.GetId(), self.OnClose)
+ 	EVT_BUTTON(self,self.savepic.GetId(), self.OnSave)
++	EVT_BUTTON(self,self.addtolist.GetId(), self.OnAddToList)
++	EVT_BUTTON(self,self.browse.GetId(), self.OnBrowse)
+ 
+         self.user = user
+         self.conn = conn
+@@ -158,6 +169,11 @@
+ 	os.rename(name,newname)
+ 	self.frame.logMessage("Picture saved to " + newname)
+ 
++    def OnAddToList(self, event):
++	self.frame.AddToList(self.user)
++
++    def OnBrowse(self, event):
++	self.frame.np.ProcessRequestToPeer(self.user, slskmessages.GetSharedFileList(None), self.frame.np.userbrowse)
+ 
+     def OnClose(self, event):
+         """ Closes the window"""

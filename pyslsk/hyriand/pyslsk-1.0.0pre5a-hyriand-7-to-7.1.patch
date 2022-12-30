@@ -1,0 +1,18 @@
+diff -rNu3 slsk-tmp1/pysoulseek/wxgui/userinfobrowse.py slsk-tmp2/pysoulseek/wxgui/userinfobrowse.py
+--- slsk-tmp1/pysoulseek/wxgui/userinfobrowse.py	2003-03-07 23:43:27.000000000 +0100
++++ slsk-tmp2/pysoulseek/wxgui/userinfobrowse.py	2003-03-07 23:43:27.000000000 +0100
+@@ -320,10 +320,10 @@
+         self.SetSizer(mainsizerv)
+         self.SetAutoLayout(true)
+         EVT_BUTTON(self,self.close.GetId(), self.OnClose)
+-	EVT_BUTTON(self,self.chat.GetId(), self.OnSendMessage)
+-	EVT_BUTTON(self,self.userinfo.GetId(), self.OnGetInfo)
+-	EVT_BUTTON(self,self.ban.GetId(), self.OnBanUser)
+-	EVT_BUTTON(self,self.addtolist.GetId(), self.OnAddToList)
++#	EVT_BUTTON(self,self.chat.GetId(), self.OnSendMessage)
++#	EVT_BUTTON(self,self.userinfo.GetId(), self.OnGetInfo)
++#	EVT_BUTTON(self,self.ban.GetId(), self.OnBanUser)
++#	EVT_BUTTON(self,self.addtolist.GetId(), self.OnAddToList)
+         EVT_TREE_SEL_CHANGED (self, self.tree.GetId(), self.OnTreeSelChanged)
+         EVT_TEXT_ENTER(self,self.search.GetId(), self.OnSearch)
+ 

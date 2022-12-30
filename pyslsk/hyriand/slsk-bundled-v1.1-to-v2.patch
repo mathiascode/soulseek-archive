@@ -1,0 +1,130 @@
+diff -ru3 slsk-tmp1/pysoulseek/wxgui/chat.py slsk-tmp2/pysoulseek/wxgui/chat.py
+--- slsk-tmp1/pysoulseek/wxgui/chat.py	2003-02-02 11:25:20.000000000 +0100
++++ slsk-tmp2/pysoulseek/wxgui/chat.py	2003-02-02 11:25:30.000000000 +0100
+@@ -460,51 +460,53 @@
+         """ Processes chat phrase that we entered. """
+         text = self.mychatphrase.GetLineText(0)
+ 	s = text.split(" ", 1)
++	cmd = s[0]
+ 	if len(s) > 1:
+ 	    rest = s[1]
+ 	else:
+ 	    rest = ""
+-	if text[:6] == "/join " or text[:3] == "/j ":
++	if cmd in ("/join", "/j"):
+ 	    self.queue.put(slskmessages.JoinRoom(rest))
+-	elif text == "/leave" or text == "/part" or text == "/l" or text == "/p":
+-	    self.OnLeave(event)
+-	elif text[:7] == "/leave " or text[:6] == "/part " or text[:3] == "/l " or text[:3] == "/p ":
++	elif cmd in ("/leave", "/part", "/l", "/p"):
+ 	    if rest:
+ 		self.queue.put(slskmessages.LeaveRoom(rest))
+ 	    else:
+ 		self.OnLeave(event)
+-	elif text[:4] == "/pm ":
+-            self.privatechat.SendMessage(text[4:])
+-	elif text == "/msg" or text == "/msg ":
+-	    pass
+-	elif text[:5] == "/msg ":
+-	    if rest[0] == "'" or rest[0] == '"':
+-		quote = rest[0] + " "
+-		rest = rest[1:]
+-	    else:
+-		quote = " "
+-	    nick = msg = ""
+-	    while len(rest):
+-		if quote and rest[:len(quote)] == quote:
+-		    rest = rest[len(quote)-1:]
+-		    quote = ""
+-		elif quote:
+-		    nick = nick + rest[0]
+-		else:
+-		    msg = msg + rest[0]
+-		rest = rest[1:]
+-	    self.privatechat.SendMessage(nick, msg)
+-	elif text == "/away" or text[:6] == "/away ":
++	elif cmd == "/pm":
++            if rest:
++                self.privatechat.SendMessage(text[4:])
++	elif cmd in ("/msg", "/n"):
++            if rest:
++	        if rest[0] == "'" or rest[0] == '"':
++		    quote = rest[0] + " "
++		    rest = rest[1:]
++	        else:
++		    quote = " "
++	        nick = msg = ""
++	        while len(rest):
++		    if quote and rest[:len(quote)] == quote:
++		        rest = rest[len(quote)-1:]
++		        quote = ""
++		    elif quote:
++		        nick = nick + rest[0]
++		    else:
++		        msg = msg + rest[0]
++		    rest = rest[1:]
++	        self.privatechat.SendMessage(nick, msg)
++	elif cmd in ("/away", "/a"):
+ 	    self.frame.OnAway(event)
+-	elif text == "/quit" or text[:6] == "/quit ":
++	elif cmd in ("/quit", "/q"):
+ 	    self.frame.Close()
+ 	    return
+-	elif text[:5] == "/add ":
+-	    self.frame.AddToList(rest)
+-	elif text[:7] == "/whois " or text[:3] == "/w ":
+-            self.frame.np.ProcessRequestToPeer(rest, slskmessages.UserInfoRequest(None), self.frame.np.userinfo)
+-	elif text[:8] == "/browse " or text[:3] == "/b ":
+-            self.frame.np.ProcessRequestToPeer(rest, slskmessages.GetSharedFileList(None), self.frame.np.userbrowse)
++	elif cmd in ("/add", "/ad"):
++	    if rest:
++	        self.frame.AddToList(rest)
++	elif cmd in ("/whois", "/w"):
++            if rest:
++                self.frame.np.ProcessRequestToPeer(rest, slskmessages.UserInfoRequest(None), self.frame.np.userinfo)
++	elif cmd in ("/browse", "/b"):
++	    if rest:
++                self.frame.np.ProcessRequestToPeer(rest, slskmessages.GetSharedFileList(None), self.frame.np.userbrowse)
+ 	else:
+             self.queue.put(slskmessages.SayChatroom(self.room, self.frame.np.encodestring(text)))
+         self.mychatphrase.Clear()
+@@ -742,13 +744,37 @@
+ 
+ 	self.AddText(str, color)
+         self.parent.queue.put(slskmessages.MessageUser(self.user, self.parent.np.encodestring(text)))
+-        self.mychatphrase.Clear()
+         if self.logctrl.GetValue():
+             self.logfile.write(str)
+ 
+     def OnEnter(self, event):
+         """ Sends our chat phrase and updates the window."""
+-        self.SendMessage(self.mychatphrase.GetLineText(0))
++        text = self.mychatphrase.GetLineText(0)
++	s = text.split(" ", 1)
++	cmd = s[0]
++	if len(s) > 1:
++	    rest = s[1]
++	else:
++	    rest = ""
++	if not rest:
++	    rest = self.user
++	if cmd in ("/away", "/a"):
++	    self.parent.np.frame.OnAway(event)
++	elif cmd in ("/quit", "/q"):
++	    self.parent.np.frame.Close()
++	    return
++	elif cmd in ("/close", "/c"):
++	    self.OnClose(event)
++	    return
++	elif cmd in ("/add", "/ad"):
++	    self.parent.np.frame.AddToList(rest)
++	elif cmd in ("/whois", "/w"):
++            self.parent.np.ProcessRequestToPeer(rest, slskmessages.UserInfoRequest(None), self.parent.np.userinfo)
++	elif cmd in ("/browse", "/b"):
++            self.parent.np.ProcessRequestToPeer(rest, slskmessages.GetSharedFileList(None), self.parent.np.userbrowse)
++	else:
++            self.SendMessage(text)
++        self.mychatphrase.Clear()
+ 
+     def OnLogCheckClick(self, event):
+         """ This is called when the 'Log' checkbox is clicked """

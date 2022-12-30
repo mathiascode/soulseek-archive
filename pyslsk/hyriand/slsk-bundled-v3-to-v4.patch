@@ -1,0 +1,144 @@
+diff -ru3 slsk-tmp2/pysoulseek/config.py slsk-tmp1/pysoulseek/config.py
+--- slsk-tmp2/pysoulseek/config.py	2003-02-13 22:45:38.000000000 +0100
++++ slsk-tmp1/pysoulseek/config.py	2003-02-13 22:45:46.000000000 +0100
+@@ -26,7 +26,7 @@
+         self.filename = filename
+ 	self.parser = ConfigParser.ConfigParser()
+ 	self.parser.read([self.filename])
+-        self.sections = {"server":{"server":None,"login":None,"passw":None,"enc":"ascii","userlist":[],"autojoin":["pyslsk"]},"transfers":{"downloaddir":None,"sharedownloaddir":1,"shared":None,"uploadbandwidth":100,"uploadlimit":100,"downloads":[],"sharedfiles":{},"sharedfilesstreams":{}},"userinfo":{"descr":"''","pic":""},"logging":{"privatechat":0,"chatrooms":0}}
++        self.sections = {"server":{"server":None,"login":None,"passw":None,"enc":"ascii","userlist":[],"autojoin":["pyslsk"]},"transfers":{"downloaddir":None,"sharedownloaddir":1,"shared":None,"uploadbandwidth":100,"uploadslots":3,"useupslots":0,"uploadlimit":100,"downloads":[],"sharedfiles":{},"sharedfilesstreams":{}},"userinfo":{"descr":"''","pic":""},"logging":{"privatechat":0,"chatrooms":0}}
+ 
+     def needConfig(self):
+ 	for i in self.sections.keys():
+@@ -39,7 +39,7 @@
+ 	for i in self.parser.sections():
+ 	    for j in self.parser.options(i):
+ 		val = self.parser.get(i,j, raw = 1)
+-		if j in ['server','shared','uploadbandwidth','uploadlimit','downloads','sharedfiles','sharedownloaddir','userlist','autojoin','sharedfilesstreams','privatechat','chatrooms']:
++		if j in ['server','shared','uploadbandwidth','uploadslots','useupslots','uploadlimit','downloads','sharedfiles','sharedownloaddir','userlist','autojoin','sharedfilesstreams','privatechat','chatrooms']:
+ 		    try:
+ 		        self.sections[i][j] = eval(val)
+ 		    except:
+diff -ru3 slsk-tmp2/pysoulseek/transfers.py slsk-tmp1/pysoulseek/transfers.py
+--- slsk-tmp2/pysoulseek/transfers.py	2003-01-15 21:03:17.000000000 +0100
++++ slsk-tmp1/pysoulseek/transfers.py	2003-02-13 22:45:46.000000000 +0100
+@@ -304,13 +304,21 @@
+ 
+     def bandwidthLimitReached(self):
+ 	maxbandwidth = self.eventprocessor.config.sections["transfers"]["uploadbandwidth"]
++	maxslots = self.eventprocessor.config.sections["transfers"]["uploadslots"]
++	useupslots = self.eventprocessor.config.sections["transfers"]["useupslots"]
+ 	bandwidth = 0
++	uploads = 0
+ 	curtime = time.time()
+ 	for i in self.uploads:
+ 	    if i.conn is not None and i.speed is not None:
+ 		bandwidth = bandwidth + i.speed
++		uploads = uploads + 1
+ #	self.eventprocessor.logMessage("%i %i " %(bandwidth, maxbandwidth),1)
+-	if bandwidth > maxbandwidth:
++
++	if useupslots:
++	    if uploads >= maxslots:
++		return 1
++	elif bandwidth > maxbandwidth:
+ 	    return 1
+ 	return 0
+ 
+diff -ru3 slsk-tmp2/pysoulseek/wxgui/configwindow.py slsk-tmp1/pysoulseek/wxgui/configwindow.py
+--- slsk-tmp2/pysoulseek/wxgui/configwindow.py	2003-02-13 22:45:38.000000000 +0100
++++ slsk-tmp1/pysoulseek/wxgui/configwindow.py	2003-02-13 22:45:46.000000000 +0100
+@@ -115,7 +115,10 @@
+ 
+ 	self.downloaddirctrl = wxTextCtrl(transferspanel,-1,size=wxSize(250, 25))
+ 	self.uploaddirsctrl = wxListBox(transferspanel, -1, size=wxSize(250,100))
++	self.upload_use_width = wxRadioButton(transferspanel,-1,"upload speed exceeds ",style=wxRB_GROUP)
++	self.upload_use_slots = wxRadioButton(transferspanel,-1,"number of uploads exceeds ")
+ 	self.uploadbandwidth = wxTextCtrl(transferspanel,-1,size=wxSize(30, 25))
++	self.upslots = wxTextCtrl(transferspanel,-1,size=wxSize(30,25))
+ 	self.uploadlimit = wxTextCtrl(transferspanel,-1,size=wxSize(30, 25))
+ 	self.downloaddirchoose = wxButton(transferspanel, -1, "Choose...")
+ 	self.sharedownloadctrl = wxCheckBox(transferspanel, -1, "Share download directory")
+@@ -127,6 +130,8 @@
+ 	EVT_BUTTON(self,self.uploaddirrem.GetId(),self.OnUploadRem)
+         EVT_BUTTON(self,self.uploaddirrescan.GetId(),self.OnUploadRescan)
+ 	EVT_CHECKBOX(self,self.sharedownloadctrl.GetId(),self.OnShareDownload)
++	EVT_RADIOBUTTON(self,self.upload_use_width.GetId(),self.OnUploadChoose)
++	EVT_RADIOBUTTON(self,self.upload_use_slots.GetId(),self.OnUploadChoose)
+ 
+ 	downloadsizer = wxBoxSizer(wxHORIZONTAL)
+         downloadsizer.Add(self.downloaddirctrl)
+@@ -142,9 +147,14 @@
+ 	uploadsizer.Add(uploadbuttonssizer)
+ 
+ 	bandwidthsizer = wxBoxSizer(wxHORIZONTAL)
+-	bandwidthsizer.Add(wxStaticText(transferspanel, -1, "upload speed exceeds "),flag=wxALIGN_CENTER)
++	bandwidthsizer.Add(self.upload_use_width)
++#	bandwidthsizer.Add(wxStaticText(transferspanel, -1, "upload speed exceeds "),flag=wxALIGN_CENTER)
+ 	bandwidthsizer.Add(self.uploadbandwidth)
+ 	bandwidthsizer.Add(wxStaticText(transferspanel, -1, " KBytes/sec"),flag=wxALIGN_CENTER)
++
++	upslotssizer = wxBoxSizer(wxHORIZONTAL)
++	upslotssizer.Add(self.upload_use_slots)
++	upslotssizer.Add(self.upslots)
+ 	
+ 	limitsizer = wxBoxSizer(wxHORIZONTAL)
+ 	limitsizer.Add(wxStaticText(transferspanel, -1, "Limit upload bandwidth to "), flag=wxALIGN_CENTER)
+@@ -158,7 +168,8 @@
+ 	transferssizer.Add(wxStaticText(transferspanel, -1, "Shared directories:"),flag=wxTOP|wxLEFT, border = 10)
+ 	transferssizer.Add(uploadsizer, flag=wxLEFT|wxRIGHT, border = 10)
+ 	transferssizer.Add(wxStaticText(transferspanel, -1, "Locally queue remote requests if current"),flag=wxTOP|wxLEFT, border = 10)
+-	transferssizer.Add(bandwidthsizer,flag=wxBOTTOM|wxLEFT, border = 10)
++	transferssizer.Add(bandwidthsizer,flag=wxLEFT, border = 10)
++	transferssizer.Add(upslotssizer,flag=wxBOTTOM|wxLEFT, border = 10)
+ 	transferssizer.Add(limitsizer, flag=wxBOTTOM|wxLEFT, border = 10)
+ 
+ 	self.descr = wxTextCtrl(userinfopanel,-1,size=wxSize(250,100),style = wxTE_MULTILINE|wxTE_RICH)
+@@ -267,6 +278,14 @@
+             if pic is not None:
+                 self.pic.SetValue(pic)
+ 
++    def OnUploadChoose(self,event):
++	if self.upload_use_width.GetValue():
++	    self.upslots.Enable(false)
++	    self.uploadbandwidth.Enable(true)
++	else:
++	    self.upslots.Enable(true)
++	    self.uploadbandwidth.Enable(false)
++
+     def SetSettings(self, config):
+ 	server = config.sections["server"]
+ 	transfers = config.sections["transfers"]
+@@ -292,6 +311,14 @@
+ 	    self.sharedfilesstreams = transfers["sharedfilesstreams"]
+ 	if transfers["uploadbandwidth"] is not None:
+ 	    self.uploadbandwidth.SetValue(str(transfers["uploadbandwidth"]))
++	if transfers["uploadslots"] is not None:
++	    self.upslots.SetValue(str(transfers["uploadslots"]))
++	if transfers["useupslots"] is not None:
++	    if transfers["useupslots"]:
++		self.upload_use_slots.SetValue(true);
++	    else:
++		self.upload_use_width.SetValue(true);
++	    self.OnUploadChoose(None)
+ 	if transfers["uploadlimit"] is not None:
+ 	    self.uploadlimit.SetValue(str(transfers["uploadlimit"]))
+ 	if transfers["sharedownloaddir"] is not None:
+@@ -323,11 +350,16 @@
+ 	except:
+ 	    uploadbandwidth = None
+ 	try:
++	    uploadslots = string.atoi(self.upslots.GetValue())
++	except:
++	    uploadslots = None
++	useupslots = self.upload_use_slots.GetValue()
++	try:
+ 	    uploadlimit = string.atoi(self.uploadlimit.GetValue())
+ 	except:
+ 	    uploadlimit = None
+             
+-	return {"server":{"server":server, "login":self.loginctrl.GetValue(), "passw":self.passwctrl.GetValue(),"enc":self.enc.GetValue()},"transfers":{"downloaddir":self.downloaddirctrl.GetValue(), "shared":shared,"sharedfiles":self.sharedfiles,"sharedfilesstreams":self.sharedfilesstreams,"uploadbandwidth":uploadbandwidth,"uploadlimit":uploadlimit,"sharedownloaddir":self.sharedownloadctrl.GetValue()},"userinfo":{"descr":self.descr.GetValue().__repr__(),"pic":self.pic.GetValue()},"logging":{"privatechat":self.loggingprivatectrl.GetValue(),"chatrooms":self.loggingchatctrl.GetValue()}}
++	return {"server":{"server":server, "login":self.loginctrl.GetValue(), "passw":self.passwctrl.GetValue(),"enc":self.enc.GetValue()},"transfers":{"downloaddir":self.downloaddirctrl.GetValue(), "shared":shared,"sharedfiles":self.sharedfiles,"sharedfilesstreams":self.sharedfilesstreams,"uploadbandwidth":uploadbandwidth,"uploadslots":uploadslots,"useupslots":useupslots,"uploadlimit":uploadlimit,"sharedownloaddir":self.sharedownloadctrl.GetValue()},"userinfo":{"descr":self.descr.GetValue().__repr__(),"pic":self.pic.GetValue()},"logging":{"privatechat":self.loggingprivatectrl.GetValue(),"chatrooms":self.loggingchatctrl.GetValue()}}
+ 
+ 
+ 

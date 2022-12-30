@@ -1,0 +1,21 @@
+diff -ru3 slsk-tmp1/pysoulseek/wxgui/transfers.py slsk-tmp2/pysoulseek/wxgui/transfers.py
+--- slsk-tmp1/pysoulseek/wxgui/transfers.py	2003-02-22 12:39:53.000000000 +0100
++++ slsk-tmp2/pysoulseek/wxgui/transfers.py	2003-02-22 12:40:24.000000000 +0100
+@@ -37,6 +37,8 @@
+ 	    return self.GetColumnText(self.list[item],col)
+ 
+     def Humanize(self, size):
++    	if size is None:
++    	    return None
+ 	priv = ""
+         if type(size) is StringType and size[-13:] == " (privileged)":
+ 		size, priv = size[:-13], size[-13:]
+@@ -52,7 +54,7 @@
+                 r = str(size)
+ 	    return r + priv
+ 	except:
+-	    return s + priv
++	    return size + priv
+ 
+     def GetColumnText(self,item,col):
+ 	if col == 0:

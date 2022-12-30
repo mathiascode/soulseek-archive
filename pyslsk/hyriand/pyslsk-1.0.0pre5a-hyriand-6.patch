@@ -1,0 +1,451 @@
+diff -ru3 pyslsk-1.0.0pre5a/pysoulseek/config.py slsk-tmp/pysoulseek/config.py
+--- pyslsk-1.0.0pre5a/pysoulseek/config.py	2003-03-02 17:42:38.000000000 +0100
++++ slsk-tmp/pysoulseek/config.py	2003-03-04 21:54:47.000000000 +0100
+@@ -31,9 +31,12 @@
+ 	"transfers":{"downloaddir":None,"sharedownloaddir":1,"shared":None, \
+ 	"uploadbandwidth":100,"uselimit":0,"uploadlimit":100,"limitby":1,
+ 	"usecustomban":0,"customban":"don't bother to retry",
+-	"downloads":[],"sharedfiles":{}, \
++	"downloads":[],"sharedfiles":{}, "preferfriends": 0, \
+ 	"sharedfilesstreams":{},"sharedindex":{}},"userinfo":{"descr":"''", \
+-	"pic":""},"logging":{"privatechat":0,"chatrooms":0},"searches":{"maxresults":50}}
++	"pic":""},"logging":{"privatechat":0,"chatrooms":0},"searches":{"maxresults":50}, \
++	"colours":{"chatme":"FOREST GREEN", "chatremote":"","chatlocal":"BLUE", \
++	"chathilite":"", "search":"","searchq":"GREY"},"sorting":{"insensitive": 0}}
++
+ 	try:
+ 	    f = open(filename+".shares")
+ 	    import cPickle
+@@ -45,7 +48,7 @@
+     def needConfig(self):
+ 	for i in self.sections.keys():
+ 	    for j in self.sections[i].keys():
+-		if self.sections[i][j] is None or self.sections[i][j] == '' and i != "userinfo":
++		if self.sections[i][j] is None or self.sections[i][j] == '' and i not in ("userinfo", "colours"):
+ 		    return 1
+ 	return 0
+ 
+@@ -53,7 +56,7 @@
+ 	for i in self.parser.sections():
+ 	    for j in self.parser.options(i):
+ 		val = self.parser.get(i,j, raw = 1)
+-		if j in ['server','shared','uploadbandwidth','uselimit',"usecustomban",'uploadlimit','limitby','downloads','sharedfiles','sharedownloaddir','userlist','banlist','autojoin','sharedfilesstreams','privatechat','chatrooms','maxresults']:
++		if j in ['server','shared','uploadbandwidth','uselimit',"usecustomban",'uploadlimit','limitby','downloads','sharedfiles','sharedownloaddir','userlist','banlist','autojoin','sharedfilesstreams','privatechat','chatrooms','maxresults','preferfriends','insensitive']:
+ 		    try:
+ 		        self.sections[i][j] = eval(val)
+ 		    except:
+diff -ru3 pyslsk-1.0.0pre5a/pysoulseek/transfers.py slsk-tmp/pysoulseek/transfers.py
+--- pyslsk-1.0.0pre5a/pysoulseek/transfers.py	2003-03-02 17:43:18.000000000 +0100
++++ slsk-tmp/pysoulseek/transfers.py	2003-03-04 23:12:13.000000000 +0100
+@@ -583,9 +583,15 @@
+ 	transfercandidate = None
+ 	list = [i for i in self.uploads if not self.userTransfers(i.user) and i.status == "Queued"]
+ 	listogg = [i for i in list if i.filename[-4:].lower() == ".ogg"]
++	if self.eventprocessor.config.sections["transfers"]["preferfriends"]:
++	    listfriends = [i[0] for i in self.eventprocessor.frame.userlist if i[0] in list]
++	else:
++	    listfriends = []
+ 	listprivileged = [i for i in list if i.user in self.privilegedusers]
+ 	if len(listogg) > 0:
+ 	    list = listogg
++	if len(listfriends) > 0:
++	    list = listfriends
+ 	if len(listprivileged) > 0:
+ 	    list = listprivileged
+ 	if len(list) == 0:
+diff -ru3 pyslsk-1.0.0pre5a/pysoulseek/wxgui/chat.py slsk-tmp/pysoulseek/wxgui/chat.py
+--- pyslsk-1.0.0pre5a/pysoulseek/wxgui/chat.py	2003-03-02 17:44:08.000000000 +0100
++++ slsk-tmp/pysoulseek/wxgui/chat.py	2003-03-04 22:58:51.000000000 +0100
+@@ -16,6 +16,7 @@
+ from sortablelist import sortableListCtrl
+ from wxPython.wx import *
+ import locale
++import random
+ 
+ 
+ def GetCompletion(part, list):
+@@ -264,10 +265,11 @@
+ 	return -1
+ 
+     def SortList(self, col, order):
++        cmpfunc = self.parent.frame.get_cmp()
+         if order == 0:
+-            self.parent.rooms.sort(lambda x,y: cmp(x[col],y[col]))
++            self.parent.rooms.sort(lambda x,y: cmpfunc(x[col],y[col]))
+         else:
+-            self.parent.rooms.sort(lambda y,x: cmp(x[col],y[col]))
++            self.parent.rooms.sort(lambda y,x: cmpfunc(x[col],y[col]))
+ 
+ 
+ class GlobalUsersList(wxPanel):
+@@ -304,7 +306,7 @@
+     def setGlobalUsersList(self, msg):
+         self.users = msg.users
+         self.userslist = self.users.keys()
+-        self.userslist.sort()
++        self.userslist.sort(self.frame.get_cmp())
+         self.userslistctrl.SetItemCount(len(self.users))
+ 	privileged = self.frame.np.transfers.privilegedusers
+ 	numprivonline = len([i for i in privileged if i in self.userslist])
+@@ -424,12 +426,14 @@
+             return -1
+ 
+     def SortList(self, col, order):
++        cmpfunc = self.parent.frame.get_cmp()
+         if order == 0:
+-	    self.parent.userslist.sort(lambda x,y: cmp(self.GetColumnValue(x,col,1),self.GetColumnValue(y,col,1)))
++	    self.parent.userslist.sort(lambda x,y: cmpfunc(self.GetColumnValue(x,col,1),self.GetColumnValue(y,col,1)))
+ 	else:
+-	    self.parent.userslist.sort(lambda y,x: cmp(self.GetColumnValue(x,col,1),self.GetColumnValue(y,col,1)))
++	    self.parent.userslist.sort(lambda y,x: cmpfunc(self.GetColumnValue(x,col,1),self.GetColumnValue(y,col,1)))
+ 
+ 
++slaps = ("a large trout", "a dictionary", "a rubber duck", "a copy of Windows XP", "a glove", "an empty bottle", "a lawsuit", "a ddos", "google", "a herring")
+ class ChatWindow(wxSplitterWindow):
+     """
+     The chat window that holds a users list, info window and dialog window.
+@@ -548,7 +552,7 @@
+                 self.frame.np.search.DoSearch(rest)
+         elif cmd == "/slap":
+             if rest:
+-                msg = "/me slaps %s with a large trout" % rest
++                msg = "/me slaps %s with %s" % (rest, random.choice(slaps))
+                 self.queue.put(slskmessages.SayChatroom(self.room, msg))
+ 	else:
+             self.queue.put(slskmessages.SayChatroom(self.room, text))
+@@ -577,7 +581,7 @@
+         self.users[msg.username] = msg.userdata
+         self.userslist = self.users.keys()
+ 	if self.userslistctrl.sortcol == -1:
+-            self.userslist.sort()
++            self.userslist.sort(self.frame.get_cmp())
+ 	else:
+ 	    self.userslistctrl.SortList(self.userslistctrl.sortcol,self.userslistctrl.sortorder)
+         self.userslistctrl.SetItemCount(len(self.users))
+@@ -587,7 +591,7 @@
+         self.room = msg.room
+         self.users = msg.users
+         self.userslist = self.users.keys()
+-        self.userslist.sort()
++        self.userslist.sort(self.frame.get_cmp())
+         self.userslistctrl.SetItemCount(len(self.users))
+         if self.logctrl.GetValue() == 1:
+             self.OnLogCheckClick(None)
+@@ -605,7 +609,7 @@
+             self.info.AppendText("%s %s left the room\n" %(time.strftime("%X"),msg.username))
+         self.userslist = self.users.keys()
+         if self.userslistctrl.sortcol == -1:
+-            self.userslist.sort()
++            self.userslist.sort(self.frame.get_cmp())
+         else:
+             self.userslistctrl.SortList(self.userslistctrl.sortcol,self.userslistctrl.sortorder)
+         self.userslistctrl.SetItemCount(len(self.users))
+@@ -616,15 +620,17 @@
+ 
+ 	if text[:4] == "/me ":
+ 	    str = "%s * %s %s\n" %(time.strftime("%X"),msg.user,text[4:])
+-	    color = "FOREST GREEN"
++	    color = self.frame.np.config.sections["colours"]["chatme"]
+ 	else:
+ 	    str = "%s [%s] %s\n" %(time.strftime("%X"),msg.user,text)
+ 	    if msg.user == self.frame.np.config.sections["server"]["login"]:
+-		color = wxBLUE
++		color = self.frame.np.config.sections["colours"]["chatlocal"]
++	    elif (text.upper()).find(self.frame.np.config.sections["server"]["login"].upper()) >= 0:
++	        color = self.frame.np.config.sections["colours"]["chathilite"]
+ 	    else:
+-		color = None
++		color = self.frame.np.config.sections["colours"]["chatremote"]
+ 
+-	if color is not None:
++	if color is not None and color != "":
+             self.chat.SetDefaultStyle(wxTextAttr(color))
+         self.chat.AppendText(self.frame.np.decode(str,wxUSE_UNICODE))
+ 	self.chat.SetDefaultStyle(wxTextAttr())
+@@ -684,9 +690,14 @@
+ 	timestamp = self.np.encode(time.strftime("%c",time.localtime()))
+ 	if text[:4] == "/me ":
+ 	    str = "%s * %s %s\n" %(timestamp,msg.user,text[4:])
+-	    color = "FOREST GREEN"
++	    color = self.np.config.sections["colours"]["chatme"]
+ 	else:
+ 	    str = "%s [%s] %s\n" %(timestamp,msg.user,text)
++	    if (" "+text.upper()+" ").find(" "+self.np.config.sections["server"]["login"].upper()+" ") >= 0:
++		color = self.np.config.sections["colours"]["hilite"]
++	    else:
++		color = self.np.config.sections["colours"]["chatremote"]
++	if color == "":
+ 	    color = None
+ 	self.users[msg.user].AddText(self.np.decode(str,wxUSE_UNICODE),color)
+ 	self.np.frame.OnPageUpdated(self)
+@@ -780,10 +791,12 @@
+         timestamp = self.parent.np.encode(time.strftime("%c",time.localtime()))
+         if text[:4] == "/me ":
+ 	    str = "%s * %s %s\n" %(timestamp,username,text[4:])
+-            color = "FOREST GREEN"
++            color = self.parent.np.config.sections["colours"]["chatme"]
+         else:
+             str = "%s %s\n" %(timestamp,text)
+-            color = wxBLUE
++            color = self.parent.np.config.sections["colours"]["chatlocal"]
++	if color == "":
++	    color = None
+ 
+ 	if len(text) > 0:
+ 	    self.AddText(self.parent.np.decode(str, wxUSE_UNICODE), color)
+@@ -829,7 +842,7 @@
+             if truerest:
+                 self.parent.np.search.DoSearch(truerest)
+         elif cmd == "/slap":
+-            self.SendMessage("/me slaps %s with a large trout" % rest)
++            self.SendMessage("/me slaps %s with %s" % (rest, random.choice(slaps)))
+ 	else:
+             self.SendMessage(text)
+         self.mychatphrase.Clear()
+diff -ru3 pyslsk-1.0.0pre5a/pysoulseek/wxgui/configwindow.py slsk-tmp/pysoulseek/wxgui/configwindow.py
+--- pyslsk-1.0.0pre5a/pysoulseek/wxgui/configwindow.py	2003-03-02 17:44:13.000000000 +0100
++++ slsk-tmp/pysoulseek/wxgui/configwindow.py	2003-03-04 22:41:58.000000000 +0100
+@@ -116,6 +116,46 @@
+         self._list.sort()
+         self.listbox.Set(self._list)
+ 
++class ColourPicker:
++    def __init__(self, parent, id, title):
++    	self.button = wxButton(parent, -1, title)
++    	self.textctrl = wxTextCtrl(parent, -1, size=wxSize(125,25), style=wxTE_READONLY|wxTE_RICH|wxTE_MULTILINE)
++    	self.button2 = wxButton(parent, -1, "Default")
++	self.parent = parent
++	self._value = ""
++	EVT_BUTTON(parent, self.button.GetId(), self.OnClick)
++	EVT_BUTTON(parent, self.button2.GetId(), self.OnClear)
++
++    def OnClick(self, event):
++    	colour = wxColourData()
++    	colour.SetColour(self.textctrl.GetValue())
++    	dlg = wxColourDialog(self.parent, colour)
++    	if dlg.ShowModal() == wxID_OK:
++    	    colour = dlg.GetColourData().GetColour()
++    	    if colour:
++    	        colourname = wxTheColourDatabase.FindName(colour)
++    	        if colourname:
++    	            self.SetValue(colourname)
++    	        else:
++    	            self.SetValue("#%2x%2x%2x" % (colour.Red(),colour.Green(),colour.Blue()))
++    	    else:
++    	        self.SetValue("")
++    	dlg.Destroy()
++
++    def OnClear(self,event):
++        self.SetValue("")
++
++    def GetValue(self):
++    	return self._value
++
++    def SetValue(self, value):
++    	self._value = value
++    	self.textctrl.Clear()
++    	style = self.textctrl.GetDefaultStyle()
++    	self.textctrl.SetDefaultStyle(wxTextAttr(value))
++	self.textctrl.AppendText(value.capitalize())
++	self.textctrl.SetDefaultStyle(style)
++
+ class ConfigWindow(wxDialog):
+     """
+     This class defines a settings window that the main application should 
+@@ -135,10 +175,12 @@
+ 	serverpanel = wxPanel(nb, -1)
+ 	transferspanel = wxPanel(nb, -1)
+ 	userinfopanel = wxPanel(nb, -1)
++	colourspanel = wxPanel(nb, -1)
+ 	miscpanel = wxPanel(nb, -1)
+ 	nb.AddPage(serverpanel,"Server")
+ 	nb.AddPage(transferspanel,"Transfers")
+ 	nb.AddPage(userinfopanel,"Personal info")
++	nb.AddPage(colourspanel,"Colours")
+ 	nb.AddPage(miscpanel,"Miscellaneous")
+ 
+ 	self.serverctrl = wxTextCtrl(serverpanel,-1,size=wxSize(250, 25))
+@@ -175,6 +217,7 @@
+         self.uploadlimit = wxTextCtrl(transferspanel, -1, size=wxSize(30,25))
+         self.limittransfer = wxRadioButton(transferspanel, -1, "per transfer", style=wxRB_GROUP)
+         self.limittotal = wxRadioButton(transferspanel, -1, "total for all transfers")
++	self.preferfriends = wxCheckBox(transferspanel, -1, "Let users in my list download first")
+ 	EVT_BUTTON(self,self.downloaddirchoose.GetId(),self.OnDownloadChoose)
+ 	EVT_BUTTON(self,self.uploaddiradd.GetId(),self.OnUploadAdd)
+ 	EVT_BUTTON(self,self.uploaddirrem.GetId(),self.OnUploadRem)
+@@ -217,6 +260,7 @@
+ 	transferssizer.Add(bandwidthsizer,flag=wxLEFT|wxBOTTOM, border = 10)
+         transferssizer.Add(self.useuploadlimit, flag=wxLEFT, border = 10)
+ 	transferssizer.Add(limitsizer, flag=wxLEFT|wxBOTTOM, border = 10)
++	transferssizer.Add(self.preferfriends, flag=wxLEFT|wxBOTTOM, border = 10)
+ 
+ 	self.descr = wxTextCtrl(userinfopanel,-1,size=wxSize(250,100),style = wxTE_MULTILINE|wxTE_RICH)
+ 	self.pic = wxTextCtrl(userinfopanel,-1,size=wxSize(250, 25))
+@@ -233,6 +277,29 @@
+ 	userinfosizer.Add(wxStaticText(userinfopanel, -1, "Picture:"),flag=wxTOP|wxLEFT, border = 10)
+ 	userinfosizer.Add(picsizer,flag=wxLEFT|wxBOTTOM, border = 10)
+ 
++	self.colourchatremote = ColourPicker(colourspanel, -1, "Remote text:")
++	self.colourchatlocal = ColourPicker(colourspanel, -1, "Local text:")
++	self.colourchatme = ColourPicker(colourspanel, -1, "/me text:")
++	self.colourhighlight = ColourPicker(colourspanel, -1, "Highlight colour:")
++	self.coloursearchnoqueue = ColourPicker(colourspanel, -1, "Without queue:")
++	self.coloursearchqueue = ColourPicker(colourspanel, -1, "With queue:")
++
++	colourssizer=wxStaticBoxSizer(wxStaticBox(colourspanel,-1,"Colours:"),wxVERTICAL)
++	colourssizer.Add(wxStaticText(colourspanel,-1,"Chat colours:"), flag=wxLEFT|wxTOP, border = 10)
++	chatcoloursgrid = wxFlexGridSizer(cols=3, vgap=2, hgap=5)
++	for i in self.colourchatremote, self.colourchatlocal, self.colourchatme, self.colourhighlight:
++	    chatcoloursgrid.Add(i.button, flag=wxEXPAND)
++	    chatcoloursgrid.Add(i.textctrl)
++	    chatcoloursgrid.Add(i.button2)
++	colourssizer.Add(chatcoloursgrid, flag=wxEXPAND|wxLEFT, border=15)
++	colourssizer.Add(wxStaticText(colourspanel,-1,"Search result colours:"),flag=wxLEFT|wxTOP, border=10)
++	searchcoloursgrid = wxFlexGridSizer(cols=3,vgap=2,hgap=5)
++	for i in self.coloursearchnoqueue, self.coloursearchqueue:
++	    searchcoloursgrid.Add(i.button, flag=wxEXPAND)
++	    searchcoloursgrid.Add(i.textctrl)
++	    searchcoloursgrid.Add(i.button2)
++	colourssizer.Add(searchcoloursgrid, flag=wxEXPAND|wxLEFT, border=15)
++
+         miscsizer=wxStaticBoxSizer(wxStaticBox(miscpanel,-1,"Misc settings:"),wxVERTICAL)
+ 	self.loggingprivatectrl = wxCheckBox(miscpanel, -1, "Log private chat by default")
+         miscsizer.Add(self.loggingprivatectrl, flag = wxLEFT|wxTOP, border = 10)
+@@ -244,6 +311,8 @@
+         resultssizer.Add(self.maxresults)
+         resultssizer.Add(wxStaticText(miscpanel, -1, " results per search request"),flag=wxALIGN_CENTER)
+ 	miscsizer.Add(resultssizer,flag=wxTOP|wxLEFT, border = 10)
++ 	self.sortinsensitive = wxCheckBox(miscpanel, -1, "Sort lists case insensitive")
++ 	miscsizer.Add(self.sortinsensitive, flag = wxLEFT|wxTOP, border = 10)
+ 	self.banlist = UserList(miscpanel, -1, wxSize(150,0), "Banned users")
+ 	miscsizer.Add(self.banlist, 1, flag=wxALIGN_CENTER|wxTOP, border=15)
+ 	custombansizer = wxBoxSizer(wxHORIZONTAL)
+@@ -259,6 +328,8 @@
+ 	transferspanel.SetAutoLayout(true)
+ 	userinfopanel.SetSizer(userinfosizer)
+ 	userinfopanel.SetAutoLayout(true)
++	colourspanel.SetSizer(colourssizer)
++	colourspanel.SetAutoLayout(true)
+ 	miscpanel.SetSizer(miscsizer)
+         miscpanel.SetAutoLayout(true)
+ 
+@@ -351,6 +422,8 @@
+ 	userinfo = config.sections["userinfo"]
+         logging = config.sections["logging"]
+ 	searches = config.sections["searches"]
++	colours = config.sections["colours"]
++	sorting = config.sections["sorting"]
+ 	if server["server"] is not None:
+     	    self.serverctrl.SetValue(string.join([str(i) for i in server["server"]],":"))
+ 	if server["login"] is not None:
+@@ -388,6 +461,8 @@
+ 	    self.usecustomban.SetValue(transfers["usecustomban"])
+ 	if transfers["customban"] is not None:
+ 	    self.customban.SetValue(transfers["customban"])
++	if transfers["preferfriends"] is not None:
++	    self.preferfriends.SetValue(transfers["preferfriends"])
+ 	if userinfo["descr"] is not None:
+ 	    self.descr.SetValue(eval(userinfo["descr"]))
+ 	if userinfo["pic"] is not None:
+@@ -398,6 +473,20 @@
+             self.loggingchatctrl.SetValue(logging["chatrooms"])
+ 	if searches["maxresults"] is not None:
+ 	    self.maxresults.SetValue(str(searches["maxresults"]))
++	if colours["chatremote"] is not None:
++	    self.colourchatremote.SetValue(colours["chatremote"])
++	if colours["chatlocal"] is not None:
++	    self.colourchatlocal.SetValue(colours["chatlocal"])
++	if colours["chatme"] is not None:
++	    self.colourchatme.SetValue(colours["chatme"])
++	if colours["chatme"] is not None:
++	    self.colourhighlight.SetValue(colours["chathilite"])
++	if colours["search"] is not None:
++	    self.coloursearchnoqueue.SetValue(colours["search"])
++	if colours["searchq"] is not None:
++	    self.coloursearchqueue.SetValue(colours["searchq"])
++	if sorting["insensitive"] is not None:
++	    self.sortinsensitive.SetValue(sorting["insensitive"])
+ 
+     def encode(self, str):
+ 	import locale,types
+@@ -454,9 +543,17 @@
+ 		"customban":self.encode(self.customban.GetValue()), \
+ 		"uploadlimit":uploadlimit, \
+ 		"limitby":self.encode(self.limittotal.GetValue()), \
++		"preferfriends":self.encode(self.preferfriends.GetValue()), \
+ 		"sharedownloaddir":self.encode(self.sharedownloadctrl.GetValue())},"userinfo": \
+ 		{"descr":self.encode(self.descr.GetValue()).__repr__(), \
+ 		"pic":self.encode(self.pic.GetValue())},"logging":{ \
+ 		"privatechat":self.encode(self.loggingprivatectrl.GetValue()), \
+ 		"chatrooms":self.encode(self.loggingchatctrl.GetValue())},
+-		"searches":{"maxresults":maxresults}}
++		"searches":{"maxresults":maxresults}, \
++		"colours":{"chatremote":self.encode(self.colourchatremote.GetValue()), \
++		"chatlocal":self.encode(self.colourchatlocal.GetValue()), \
++		"chatme":self.encode(self.colourchatme.GetValue()), \
++		"chathilite":self.encode(self.colourhighlight.GetValue()), \
++		"search":self.encode(self.coloursearchnoqueue.GetValue()), \
++		"searchq":self.encode(self.coloursearchqueue.GetValue())}, \
++		"sorting":{"insensitive": self.encode(self.sortinsensitive.GetValue())}}
+diff -ru3 pyslsk-1.0.0pre5a/pysoulseek/wxgui/frame.py slsk-tmp/pysoulseek/wxgui/frame.py
+--- pyslsk-1.0.0pre5a/pysoulseek/wxgui/frame.py	2003-03-02 17:44:18.000000000 +0100
++++ slsk-tmp/pysoulseek/wxgui/frame.py	2003-03-04 21:29:21.000000000 +0100
+@@ -21,6 +21,7 @@
+ import buttonsplitter
+ from wxPython.wx import *
+ from configwindow import *
++from types import StringType
+ 
+ class NetworkEvent(wxPyEvent):
+     """
+@@ -349,7 +350,7 @@
+ 	    
+ 
+     def InitUserList(self,list):
+-	list.sort()
++	list.sort(self.get_cmp())
+ 	self.userlist = [[i,0] for i in list]
+ 	for i in list:
+ 	    self.np.queue.put(slskmessages.GetUserStatus(i))
+@@ -408,6 +409,18 @@
+ 	    else:
+ 		self.logMessage("No handler for class %s %s" % (i.__class__, vars(i)))
+ 
++    def cmp_insensitive(self, x, y):
++        if x.__class__ is StringType:
++            return cmp(x.upper(), y.upper())
++        else:
++            return cmp(x, y)
++
++    def get_cmp(self):
++        if self.np.config.sections["sorting"]["insensitive"]:
++            return self.cmp_insensitive
++        else:
++            return cmp
++
+     def EVT_NETWORK(self, win, id, func):
+ 	""" Network event macro """
+ 	win.Connect(-1, -1, id, func) 
+diff -ru3 pyslsk-1.0.0pre5a/pysoulseek/wxgui/search.py slsk-tmp/pysoulseek/wxgui/search.py
+--- pyslsk-1.0.0pre5a/pysoulseek/wxgui/search.py	2003-03-02 19:42:03.000000000 +0100
++++ slsk-tmp/pysoulseek/wxgui/search.py	2003-03-04 21:01:38.000000000 +0100
+@@ -142,6 +142,8 @@
+ 
+         self.results = []
+ 
++	self.UpdateColours()
++
+         self.menu = wxMenu()
+         downloadID=wxNewId()
+         self.menu.Append(downloadID, 'Download File(s)')
+@@ -165,6 +167,10 @@
+         EVT_RIGHT_UP(self,self.OnRightUp)
+ 
+ 
++    def UpdateColours(self):
++    	self.normal.SetTextColour(self.frame.np.config.sections["colours"]["search"])
++        self.grey.SetTextColour(self.frame.np.config.sections["colours"]["searchq"])
++
+     def OnRightUp(self,event):
+         """ Pops up a menu on a right-click in users list."""
+ 	pt = event.GetPosition()

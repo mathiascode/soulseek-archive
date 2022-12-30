@@ -1,0 +1,106 @@
+diff -rNu3 slsk-tmp1/pysoulseek/wxgui/chat.py slsk-tmp2/pysoulseek/wxgui/chat.py
+--- slsk-tmp1/pysoulseek/wxgui/chat.py	2003-06-03 14:55:25.000000000 +0200
++++ slsk-tmp2/pysoulseek/wxgui/chat.py	2003-06-03 14:55:25.000000000 +0200
+@@ -751,6 +751,10 @@
+         self.users={}
+         self.queue = queue
+ 	self.np = np
++	self.repliedusers = []
++
++    def OnAway(self, away):
++        self.repliedusers = []
+ 
+     def ShowMessage(self, msg, text):
+         """ Processes MessageUser message from the server. """
+@@ -772,7 +776,8 @@
+ 	    color = None
+ 	self.users[msg.user].AddText(self.np.decode(str,wxUSE_UNICODE),color)
+ 	autoreply = self.np.config.sections["server"]["autoreply"]
+-	if self.np.frame.away and autoreply:
++	if self.np.frame.away and autoreply and msg.user not in self.repliedusers:
++	    self.repliedusers.append(msg.user)
+ 	    self.users[msg.user].SendMessage(autoreply)
+ 	self.np.frame.OnPageUpdated(self)
+ 	self.OnPageUpdated(self.users[msg.user])
+diff -rNu3 slsk-tmp1/pysoulseek/wxgui/frame.py slsk-tmp2/pysoulseek/wxgui/frame.py
+--- slsk-tmp1/pysoulseek/wxgui/frame.py	2003-06-03 14:55:25.000000000 +0200
++++ slsk-tmp2/pysoulseek/wxgui/frame.py	2003-06-03 14:55:25.000000000 +0200
+@@ -199,6 +199,7 @@
+         	    self.away = self.autoaway = False
+                     self.np.queue.put(slskmessages.SetStatus(2))
+                     self.SetStatusText("Online", 1)
++                    self.np.privatechat.OnAway(self.away)
+ 		if not self.away:
+ 	            self.awaytimer.Start(1000*60*timeout,True)
+ 
+@@ -297,6 +298,7 @@
+ 	else:
+ 	    self.np.queue.put(slskmessages.SetStatus(2))
+ 	    self.SetStatusText("Online", 1)
++	self.np.privatechat.OnAway(self.away)
+ 
+     def OnSettings(self, event):
+ 	self.configwindow.SetSettings(self.np.config)
+diff -rNu3 slsk-tmp1/pysoulseek/wxgui/images.py slsk-tmp2/pysoulseek/wxgui/images.py
+--- slsk-tmp1/pysoulseek/wxgui/images.py	2003-05-04 18:09:14.000000000 +0200
++++ slsk-tmp2/pysoulseek/wxgui/images.py	2003-06-03 14:55:25.000000000 +0200
+@@ -296,3 +296,18 @@
+     stream = cStringIO.StringIO(getUpData())
+     return wxImageFromStream(stream)
+ 
++#----------------------------------------------------------------------
++def getEmptyData():
++    return zlib.decompress(
++'x\xda\xeb\x0c\xf0s\xe7\xe5\x92\xe2b``\xe0\xf5\xf4p\t\x02\xd2\x02 \xcc\xc1\
++\x06$\xe5?\xffO\x04R,\xc5N\x9e!\x1c@P\xc3\x91\xd2\x01\xe4\xcbx\xba8\x86T\xcc\
++I\x16\x11\x10HX\xc0b\x10\xb8\xa4\xfaJC \xb3\x1b\xaf\x84\x0bP\x13\xfb~\x86\
++\x00\xb79_+\x80\xea\x18<]\xfd\\\xd69%4\x01\x00\xd4\x10\x16\xa5' )
++
++def getEmptyBitmap():
++    return wxBitmapFromImage(getEmptyImage())
++
++def getEmptyImage():
++    stream = cStringIO.StringIO(getEmptyData())
++    return wxImageFromStream(stream)
++
+diff -rNu3 slsk-tmp1/pysoulseek/wxgui/notebook.py slsk-tmp2/pysoulseek/wxgui/notebook.py
+--- slsk-tmp1/pysoulseek/wxgui/notebook.py	2003-06-03 14:55:25.000000000 +0200
++++ slsk-tmp2/pysoulseek/wxgui/notebook.py	2003-06-03 14:55:25.000000000 +0200
+@@ -17,6 +17,7 @@
+         self.imglist = wxImageList(18,18)
+         self.online = self.imglist.Add(images.getOnlineBitmap())
+ 	self.hilite = self.imglist.Add(images.getActiveBitmap())
++	self.empty = self.imglist.Add(images.getEmptyBitmap())
+         self.AssignImageList(self.imglist)
+ 	self.pages = []
+ 	self.page = 0
+@@ -24,13 +25,13 @@
+ 
+     def OnPageChanged(self, event):
+ 	self.page = event.GetSelection()
+-	self.SetPageImage(self.page,-1)
++	self.SetPageImage(self.page,self.empty)
+ 	if self.frame is not None:
+ 	    self.frame.SetTitle("PySoulSeek %s" % version)
+ 	event.Skip()
+ 
+     def AddPage(self, page, title):
+-	wxNotebook.AddPage(self, page, title)
++	wxNotebook.AddPage(self, page, title, False, self.empty)
+ 	self.pages.append(page)
+ 
+     def DeleteAllPages(self):
+diff -rNu3 slsk-tmp1/pysoulseek/wxgui/search.py slsk-tmp2/pysoulseek/wxgui/search.py
+--- slsk-tmp1/pysoulseek/wxgui/search.py	2003-06-03 14:55:25.000000000 +0200
++++ slsk-tmp2/pysoulseek/wxgui/search.py	2003-06-03 14:55:25.000000000 +0200
+@@ -207,8 +207,8 @@
+ 
+ 	parent = self.resultsnb
+         self.resultsnb.DeletePage(selectednum)
+-	if parent.GetPageCount() > 0:
+-	    parent.SetSelection(0)
++#	if parent.GetPageCount() > selectednum:
++#	    parent.SetSelection(0)
+ 
+     def OnClose(self, event):
+ 	self.Close(0)

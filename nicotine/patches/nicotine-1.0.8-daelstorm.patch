@@ -1,0 +1,4321 @@
+diff -rc nicotine-1.0.8/CHANGELOG nicotine-daelstorm/CHANGELOG
+*** nicotine-1.0.8/CHANGELOG	2004-12-24 21:56:02.000000000 +0200
+--- nicotine-daelstorm/CHANGELOG	2004-10-13 18:05:11.000000000 +0200
+***************
+*** 1,8 ****
+  ChangeLog for Nicotine
+  
+- Version 1.0.8
+-  - Version 1.0.8rc1 re-released as 1.0.8
+- 
+  Version 1.0.8rc1 May 1 2004
+   - Added the missing handler for server-pushed searches
+   - Allow users to have negative speed-ratings
+--- 1,5 ----
+diff -rc nicotine-1.0.8/pynicotine/gtkgui/dirchooser.py nicotine-daelstorm/pynicotine/gtkgui/dirchooser.py
+*** nicotine-1.0.8/pynicotine/gtkgui/dirchooser.py	2004-01-04 02:01:29.000000000 +0200
+--- nicotine-daelstorm/pynicotine/gtkgui/dirchooser.py	2004-12-23 03:54:05.000000000 +0200
+***************
+*** 10,256 ****
+  
+  from pynicotine.utils import _
+  
+- class DirNode:
+- 	def __init__(self, parent, name, init = None):
+- 		self.parent = parent
+- 		self.name = name
+- 		if init is not None:
+- 			self._nodes = [DirNode(self, init)]
+- 		else:
+- 			self._nodes = None
+- 	
+- 	def nodes(self):
+- 		if self._nodes is None:
+- 			self._nodes = []
+- 			node = self
+- 			path = ""
+- 			while node:
+- 				path = os.path.join(node.name, path)
+- 				node = node.parent
+- 			try:
+- 				l = os.listdir(path)
+- 			except:
+- 				self._nodes = []
+- 				return self._nodes
+- 				
+- 			l.sort(locale.strcoll)
+- 			for i in l:
+- 				if i[0] == ".":
+- 					continue
+- 				fn = os.path.join(path, i)
+- 				if not os.path.isdir(fn):
+- 					continue
+- 				newnode = DirNode(self, i)
+- 				self._nodes.append(newnode)
+- 		return self._nodes
+- 
+- 	def find(self, path):
+- 		self.nodes()
+- 		ix = 0
+- 		for node in self._nodes:
+- 			if node.name == path:
+- 				return node, ix
+- 			ix += 1
+- 		return None, 0
+- 		
+- class DirTreeModel(gtk.GenericTreeModel):
+- 	def __init__(self):
+- 		gtk.GenericTreeModel.__init__(self)
+- 		self.tree = DirNode(None, "", "/")
+- 
+- 	def find_path(self, path):
+- 		if not path:
+- 			return
+- 		if path[-1] == "/":
+- 			path = path[:-1]
+- 		p = []
+- 		while 1:
+- 			path, t = os.path.split(path)
+- 			if t == "":
+- 				p.insert(0, path)
+- 				break
+- 			p.insert(0, t)
+- 		r = []
+- 		node = self.tree
+- 		for i in p:
+- 			node, ix = node.find(i)
+- 			if node is None:
+- 				break
+- 			r.append(ix)
+- 		return tuple(r)
+- 		
+- 	def on_get_flags(self):
+- 		return 0
+- 	
+- 	def on_get_n_columns(self):
+- 		return 2
+- 	
+- 	def on_get_column_type(self, column):
+- 		return gobject.TYPE_STRING
+- 	
+- 	def on_get_path(self, node):
+- 		path = []
+- 		while node.parent != None:
+- 			path.insert(0, node.parent.nodes().index(node))
+- 			node = node.parent
+- 		return tuple(path)
+- 	
+- 	def on_get_iter(self, path):
+- 		node = self.tree
+- 		for i in path:
+- 			node = node.nodes()[i]
+- 		return node
+- 	
+- 	def on_get_value(self, node, column):
+- 		if column == 0:
+- 			return recode(node.name)
+- 
+- 		res = node.name
+- 		while node.parent is not None:
+- 			node = node.parent
+- 			res = os.path.join(node.name, res)
+- 		return res
+- 	
+- 	def on_iter_next(self, node):
+- 		try:
+- 			ix = node.parent.nodes().index(node) + 1
+- 			return node.parent.nodes()[ix]
+- 		except IndexError:
+- 			return None
+- 	
+- 	def on_iter_children(self, node):
+- 		try:
+- 			return node.nodes()[0]
+- 		except:
+- 			return None
+- 	
+- 	def on_iter_has_child(self, node):
+- 		return len(node.nodes()) > 0
+- 	
+- 	def on_iter_n_children(self, node):
+- 		return len(node.nodes())
+- 	
+- 	def on_iter_nth_child(self, node, n):
+- 		try:
+- 			return node.nodes()[n]
+- 		except:
+- 			return None
+- 	
+- 	def on_iter_parent(self, node):
+- 		return node.parent
+- 
+- class DirChooser(gtk.Dialog):
+- 	def __init__(self, title = _("Select directory..."), parent = None, initialdir = "~"):
+- 		gtk.Dialog.__init__(self, title, parent, gtk.DIALOG_MODAL | gtk.DIALOG_DESTROY_WITH_PARENT,
+-         	                    (gtk.STOCK_OK, gtk.RESPONSE_OK,
+-                 	             gtk.STOCK_CANCEL, gtk.RESPONSE_CANCEL))
+- 
+- 		self.set_default_size(300, 400)
+- 		self.set_border_width(10)
+- 		self.vbox.set_spacing(10)
+- 
+- 		scrolledwindow = gtk.ScrolledWindow()
+- 		scrolledwindow.set_shadow_type(gtk.SHADOW_IN)
+- 		
+- 		self.model = DirTreeModel()
+- 		
+- 		self.treeview = gtk.TreeView(self.model)
+- 		self.treeview.set_headers_visible(gtk.FALSE)
+- 		scrolledwindow.add(self.treeview)
+- 
+- 		column = gtk.TreeViewColumn(_("Directory Tree"), gtk.CellRendererText(), text = 0)
+- 		self.treeview.append_column(column)
+- 
+- 		scrolledwindow.show_all()
+- 		self.vbox.pack_start(scrolledwindow, gtk.TRUE, gtk.TRUE)
+- 		
+- 		hbox = gtk.HBox()
+- 		b = gtk.Button(_("Create folder"))
+- 		b.connect("clicked", self.OnMakeDir)
+- 		hbox.pack_end(b, gtk.FALSE, gtk.FALSE)
+- 		hbox.show_all()
+- 		self.vbox.pack_start(hbox, gtk.FALSE, gtk.TRUE)
+- 
+- 		if not initialdir:
+- 			initialdir = "~"
+- 		if initialdir == "~" and sys.platform.startswith("win"):
+- 			initialdir = "C:\\My Documents"
+- 		self.initialdir = initialdir
+- 		
+- 	def run(self):
+- 		gobject.idle_add(self.select_path, self.initialdir)
+- 		return gtk.Dialog.run(self)
+- 	
+- 	def select_path(self, path):
+- 		path = self.model.find_path(os.path.expanduser(path))
+- 		if path:
+- 			for i in range(len(path)):
+- 				self.treeview.expand_row(path[:i+1], gtk.FALSE)
+- 			sel = self.treeview.get_selection()
+- 			if sel:
+- 				sel.unselect_all()
+- 				sel.select_path(path)
+- 				self.treeview.scroll_to_cell(path, None, gtk.TRUE, 0.5, 0.5)
+- 
+- 	def get_path(self):
+- 		model, iter = self.treeview.get_selection().get_selected()
+- 		if iter is not None:
+- 			return model.get_value(iter, 1)
+- 		else:
+- 			return None
+- 
+- 	def OnMakeDir(self, widget):
+- 		path = self.get_path()
+- 		if not path:
+- 			path = ""
+- 		else:
+- 			path += "/"
+- 		newpath = InputDialog(self, _("Make folder..."), _("Enter pathname of new folder:"))
+- 		if not newpath:
+- 			return
+- 		path = os.path.normpath(os.path.join(path, os.path.expanduser(newpath)))
+- 		try:
+- 			os.makedirs(path)
+- 		except:
+- 			dlg = gtk.MessageDialog(self, 0, gtk.MESSAGE_WARNING, gtk.BUTTONS_OK, _("Could not create folder"))
+- 			dlg.run()
+- 			dlg.destroy()
+- 			self.select_path(path)
+- 			return
+- 			
+- 		if path[:-1] == "/":
+- 			path = path[:-1]
+- 		s = []
+- 		p = path
+- 		while 1:
+- 			p, t = os.path.split(p)
+- 			if t == "":
+- 				s.insert(0, p)
+- 				break
+- 			s.insert(0, t)
+- 		p = ""
+- 		node = self.model.tree
+- 		for part in s:
+- 			newnode, ix = node.find(part)
+- 			p = os.path.join(p, part)
+- 			if newnode is None:
+- 				newnode = DirNode(node, part)
+- 				newnode._nodes = []
+- 				node._nodes.append(newnode)
+- 				_p = self.model.find_path(p)
+- 				_i = self.model.get_iter(_p)
+- 				self.model.emit("row-inserted", _p, _i)
+- 			node = newnode
+- 		self.select_path(path)
+- 
+  def ChooseDir(parent = None, initialdir = "~"):
+! 	dlg = DirChooser(parent = parent, initialdir = initialdir)
+! 	response = dlg.run()
+! 	if response == gtk.RESPONSE_OK:
+! 		res = dlg.get_path()
+  	else:
+  		res = None
+! 	dlg.destroy()
+  	return res
+  
+  if __name__ == "__main__":
+--- 10,25 ----
+  
+  from pynicotine.utils import _
+  
+  def ChooseDir(parent = None, initialdir = "~"):
+! 	dialog = gtk.FileChooserDialog(parent=None, action=gtk.FILE_CHOOSER_ACTION_SELECT_FOLDER, buttons=(gtk.STOCK_OK, gtk.RESPONSE_ACCEPT, gtk.STOCK_CANCEL, gtk.RESPONSE_REJECT))
+! 	dialog.set_select_multiple(True)
+! 	response = dialog.run()
+! 	
+! 	if response == gtk.RESPONSE_ACCEPT:
+! 		res = dialog.get_filenames()
+  	else:
+  		res = None
+! 	dialog.destroy()
+  	return res
+  
+  if __name__ == "__main__":
+diff -rc nicotine-1.0.8/pynicotine/gtkgui/glade2py.py nicotine-daelstorm/pynicotine/gtkgui/glade2py.py
+*** nicotine-1.0.8/pynicotine/gtkgui/glade2py.py	2004-01-04 02:02:05.000000000 +0200
+--- nicotine-daelstorm/pynicotine/gtkgui/glade2py.py	2004-12-23 14:02:02.000000000 +0200
+***************
+*** 1,3 ****
+--- 1,4 ----
++ #!/usr/bin/python
+  # Copyright (c) 2003-2004 Hyriand. All rights reserved.
+  #
+  indent = "        "
+***************
+*** 27,32 ****
+--- 28,34 ----
+  	["scrollable", lambda w,v: "%s.set_scrollable(gtk.%s)" % (w, v.upper())],
+  	["can-focus", lambda w,v: "%s.set_property('can-focus', gtk.%s)" % (w, v.upper())],
+  	["can-focus", lambda w,v: "%s.set_property('has-focus', gtk.%s)" % (w, v.upper())],
++ 	["wrap", lambda w,v: "%s.set_line_wrap(gtk.%s)" % (w, v.upper())],
+  	["visible", lambda w, v: (v == "True" and ("%s.show()" % w)) or ""],
+  	["headers_visible", lambda w, v: "%s.set_headers_visible(gtk.%s)" % (w, v.upper())],
+  	["spacing", lambda w,v: "%s.set_spacing(%s)" % (w,v)],
+***************
+*** 306,311 ****
+--- 308,314 ----
+  	"GtkProgressBar": [write_widget_generic, "ProgressBar"],
+  	"GtkImage": [write_widget_generic, "Image"],
+  	"GtkVSeparator": [write_widget_generic, "VSeparator"],
++ 	"GtkHSeparator": [write_widget_generic, "HSeparator"],	
+  	"GtkHButtonBox": [write_widget_container, "HButtonBox", PM_PACK],
+  	"GtkAlignment": [write_widget_container, "Alignment", PM_ADD, "@xalign", "@yalign", "@xscale", "@yscale"],
+  	"Custom": [write_widget_custom],
+diff -rc nicotine-1.0.8/pynicotine/gtkgui/nicotine_glade.py nicotine-daelstorm/pynicotine/gtkgui/nicotine_glade.py
+*** nicotine-1.0.8/pynicotine/gtkgui/nicotine_glade.py	2004-01-08 00:08:25.000000000 +0200
+--- nicotine-daelstorm/pynicotine/gtkgui/nicotine_glade.py	2004-12-23 14:02:06.000000000 +0200
+***************
+*** 403,408 ****
+--- 403,409 ----
+  
+          self.label22 = gtk.Label(_("Add"))
+          self.label22.set_padding(0, 0)
++         self.label22.set_line_wrap(gtk.FALSE)
+          self.label22.show()
+          self.hbox15.pack_start(self.label22, gtk.FALSE, gtk.FALSE, 0)
+  
+***************
+*** 449,454 ****
+--- 450,456 ----
+  
+          self.label21 = gtk.Label(_("Add"))
+          self.label21.set_padding(0, 0)
++         self.label21.set_line_wrap(gtk.FALSE)
+          self.label21.show()
+          self.hbox14.pack_start(self.label21, gtk.FALSE, gtk.FALSE, 0)
+  
+***************
+*** 520,525 ****
+--- 522,528 ----
+  
+          self.label12 = gtk.Label(_("Add: "))
+          self.label12.set_padding(0, 0)
++         self.label12.set_line_wrap(gtk.FALSE)
+          self.label12.show()
+          self.hbox3.pack_start(self.label12, gtk.FALSE, gtk.FALSE, 0)
+  
+***************
+*** 973,978 ****
+--- 976,982 ----
+  
+          self.label13 = gtk.Label(_("Filter in:"))
+          self.label13.set_padding(0, 0)
++         self.label13.set_line_wrap(gtk.FALSE)
+          self.label13.show()
+          self.Filters.pack_start(self.label13, gtk.FALSE, gtk.FALSE, 0)
+  
+***************
+*** 992,997 ****
+--- 996,1002 ----
+  
+          self.label14 = gtk.Label(_("Filter out:"))
+          self.label14.set_padding(0, 0)
++         self.label14.set_line_wrap(gtk.FALSE)
+          self.label14.show()
+          self.Filters.pack_start(self.label14, gtk.FALSE, gtk.FALSE, 0)
+  
+***************
+*** 1011,1016 ****
+--- 1016,1022 ----
+  
+          self.label15 = gtk.Label(_("Size:"))
+          self.label15.set_padding(0, 0)
++         self.label15.set_line_wrap(gtk.FALSE)
+          self.label15.show()
+          self.Filters.pack_start(self.label15, gtk.FALSE, gtk.FALSE, 0)
+  
+***************
+*** 1031,1036 ****
+--- 1037,1043 ----
+  
+          self.label16 = gtk.Label(_("Bitrate:"))
+          self.label16.set_padding(0, 0)
++         self.label16.set_line_wrap(gtk.FALSE)
+          self.label16.show()
+          self.Filters.pack_start(self.label16, gtk.FALSE, gtk.FALSE, 0)
+  
+***************
+*** 1051,1056 ****
+--- 1058,1064 ----
+  
+          self.label23 = gtk.Label(_("Country:"))
+          self.label23.set_padding(0, 0)
++         self.label23.set_line_wrap(gtk.FALSE)
+          self.label23.show()
+          self.Filters.pack_start(self.label23, gtk.FALSE, gtk.FALSE, 0)
+  
+***************
+*** 1167,1172 ****
+--- 1175,1181 ----
+  
+          self.label17 = gtk.Label(_("Self description:"))
+          self.label17.set_padding(0, 0)
++         self.label17.set_line_wrap(gtk.FALSE)
+          self.label17.show()
+          self.frame1.set_label_widget(self.label17)
+  
+***************
+*** 1184,1201 ****
+--- 1193,1213 ----
+          self.uploads = gtk.Label(_("Total uploads allowed: unknown"))
+          self.uploads.set_alignment(0, 0.5)
+          self.uploads.set_padding(0, 0)
++         self.uploads.set_line_wrap(gtk.FALSE)
+          self.uploads.show()
+          self.vbox10.pack_start(self.uploads, gtk.FALSE, gtk.FALSE, 0)
+  
+          self.queuesize = gtk.Label(_("Queue size: unknown"))
+          self.queuesize.set_alignment(0, 0.5)
+          self.queuesize.set_padding(0, 0)
++         self.queuesize.set_line_wrap(gtk.FALSE)
+          self.queuesize.show()
+          self.vbox10.pack_start(self.queuesize, gtk.FALSE, gtk.FALSE, 0)
+  
+          self.slotsavail = gtk.Label(_("Slots available: unknown"))
+          self.slotsavail.set_alignment(0, 0.5)
+          self.slotsavail.set_padding(0, 0)
++         self.slotsavail.set_line_wrap(gtk.FALSE)
+          self.slotsavail.show()
+          self.vbox10.pack_start(self.slotsavail, gtk.FALSE, gtk.FALSE, 0)
+  
+***************
+*** 1207,1212 ****
+--- 1219,1225 ----
+  
+          self.label18 = gtk.Label(_("Information:"))
+          self.label18.set_padding(0, 0)
++         self.label18.set_line_wrap(gtk.FALSE)
+          self.label18.show()
+          self.frame2.set_label_widget(self.label18)
+  
+***************
+*** 1238,1243 ****
+--- 1251,1257 ----
+  
+          self.label19 = gtk.Label(_("Picture:"))
+          self.label19.set_padding(0, 0)
++         self.label19.set_line_wrap(gtk.FALSE)
+          self.label19.show()
+          self.frame3.set_label_widget(self.label19)
+  
+***************
+*** 1374,1379 ****
+--- 1388,1394 ----
+  
+          self.label20 = gtk.Label(_("Search file and folder names (exact match):"))
+          self.label20.set_padding(0, 0)
++         self.label20.set_line_wrap(gtk.FALSE)
+          self.label20.show()
+          self.hbox8.pack_start(self.label20, gtk.FALSE, gtk.FALSE, 0)
+  
+***************
+*** 1506,1511 ****
+--- 1521,1527 ----
+  
+          self.label10 = gtk.Label(_("Create: "))
+          self.label10.set_padding(0, 0)
++         self.label10.set_line_wrap(gtk.FALSE)
+          self.label10.show()
+          self.hbox1.pack_start(self.label10, gtk.FALSE, gtk.FALSE, 0)
+  
+diff -rc nicotine-1.0.8/pynicotine/gtkgui/nicotine-settings.glade nicotine-daelstorm/pynicotine/gtkgui/nicotine-settings.glade
+*** nicotine-1.0.8/pynicotine/gtkgui/nicotine-settings.glade	2004-01-13 20:56:26.000000000 +0200
+--- nicotine-daelstorm/pynicotine/gtkgui/nicotine-settings.glade	2004-12-23 03:42:33.000000000 +0200
+***************
+*** 5,16 ****
+  
+  <widget class="GtkWindow" id="ServerFrame">
+    <property name="visible">True</property>
+!   <property name="title" translatable="yes">window2</property>
+    <property name="type">GTK_WINDOW_TOPLEVEL</property>
+    <property name="window_position">GTK_WIN_POS_NONE</property>
+    <property name="modal">False</property>
+    <property name="resizable">True</property>
+    <property name="destroy_with_parent">False</property>
+  
+    <child>
+      <widget class="GtkFrame" id="Main">
+--- 5,21 ----
+  
+  <widget class="GtkWindow" id="ServerFrame">
+    <property name="visible">True</property>
+!   <property name="title" translatable="yes">Server Settings</property>
+    <property name="type">GTK_WINDOW_TOPLEVEL</property>
+    <property name="window_position">GTK_WIN_POS_NONE</property>
+    <property name="modal">False</property>
+    <property name="resizable">True</property>
+    <property name="destroy_with_parent">False</property>
++   <property name="decorated">True</property>
++   <property name="skip_taskbar_hint">False</property>
++   <property name="skip_pager_hint">False</property>
++   <property name="type_hint">GDK_WINDOW_TYPE_HINT_NORMAL</property>
++   <property name="gravity">GDK_GRAVITY_NORTH_WEST</property>
+  
+    <child>
+      <widget class="GtkFrame" id="Main">
+***************
+*** 34,46 ****
+  
+  	      <child>
+  		<widget class="GtkLabel" id="label166">
+! 		  <property name="width_request">123</property>
+  		  <property name="visible">True</property>
+  		  <property name="label" translatable="yes">Server: (use server.slsknet.org:2240 for the main server)</property>
+  		  <property name="use_underline">False</property>
+  		  <property name="use_markup">False</property>
+  		  <property name="justify">GTK_JUSTIFY_LEFT</property>
+! 		  <property name="wrap">False</property>
+  		  <property name="selectable">False</property>
+  		  <property name="xalign">0</property>
+  		  <property name="yalign">0</property>
+--- 39,51 ----
+  
+  	      <child>
+  		<widget class="GtkLabel" id="label166">
+! 		  <property name="width_request">360</property>
+  		  <property name="visible">True</property>
+  		  <property name="label" translatable="yes">Server: (use server.slsknet.org:2240 for the main server)</property>
+  		  <property name="use_underline">False</property>
+  		  <property name="use_markup">False</property>
+  		  <property name="justify">GTK_JUSTIFY_LEFT</property>
+! 		  <property name="wrap">True</property>
+  		  <property name="selectable">False</property>
+  		  <property name="xalign">0</property>
+  		  <property name="yalign">0</property>
+***************
+*** 149,155 ****
+  
+  		  <child>
+  		    <widget class="GtkEntry" id="Login">
+! 		      <property name="width_request">100</property>
+  		      <property name="visible">True</property>
+  		      <property name="can_focus">True</property>
+  		      <property name="editable">True</property>
+--- 154,160 ----
+  
+  		  <child>
+  		    <widget class="GtkEntry" id="Login">
+! 		      <property name="width_request">130</property>
+  		      <property name="visible">True</property>
+  		      <property name="can_focus">True</property>
+  		      <property name="editable">True</property>
+***************
+*** 257,263 ****
+  
+  	      <child>
+  		<widget class="GtkLabel" id="label169">
+- 		  <property name="width_request">129</property>
+  		  <property name="visible">True</property>
+  		  <property name="label" translatable="yes">Network Character Encoding (utf-8 is a good choice)</property>
+  		  <property name="use_underline">False</property>
+--- 262,267 ----
+***************
+*** 342,367 ****
+  	      <property name="spacing">0</property>
+  
+  	      <child>
+- 		<widget class="GtkCheckButton" id="DirectConnection">
+- 		  <property name="visible">True</property>
+- 		  <property name="can_focus">True</property>
+- 		  <property name="label" translatable="yes">I can receive direct connections</property>
+- 		  <property name="use_underline">True</property>
+- 		  <property name="relief">GTK_RELIEF_NORMAL</property>
+- 		  <property name="active">False</property>
+- 		  <property name="inconsistent">False</property>
+- 		  <property name="draw_indicator">True</property>
+- 		</widget>
+- 		<packing>
+- 		  <property name="padding">0</property>
+- 		  <property name="expand">False</property>
+- 		  <property name="fill">False</property>
+- 		</packing>
+- 	      </child>
+- 
+- 	      <child>
+  		<widget class="GtkLabel" id="label172">
+- 		  <property name="width_request">30</property>
+  		  <property name="visible">True</property>
+  		  <property name="label" translatable="yes">Client connection ports (use first available):</property>
+  		  <property name="use_underline">False</property>
+--- 346,352 ----
+***************
+*** 375,389 ****
+  		  <property name="ypad">0</property>
+  		</widget>
+  		<packing>
+! 		  <property name="padding">3</property>
+! 		  <property name="expand">True</property>
+! 		  <property name="fill">True</property>
+  		</packing>
+  	      </child>
+  
+  	      <child>
+  		<widget class="GtkHBox" id="hbox106">
+! 		  <property name="width_request">40</property>
+  		  <property name="visible">True</property>
+  		  <property name="homogeneous">False</property>
+  		  <property name="spacing">5</property>
+--- 360,374 ----
+  		  <property name="ypad">0</property>
+  		</widget>
+  		<packing>
+! 		  <property name="padding">0</property>
+! 		  <property name="expand">False</property>
+! 		  <property name="fill">False</property>
+  		</packing>
+  	      </child>
+  
+  	      <child>
+  		<widget class="GtkHBox" id="hbox106">
+! 		  <property name="width_request">114</property>
+  		  <property name="visible">True</property>
+  		  <property name="homogeneous">False</property>
+  		  <property name="spacing">5</property>
+***************
+*** 451,461 ****
+  		  </child>
+  		</widget>
+  		<packing>
+! 		  <property name="padding">0</property>
+  		  <property name="expand">True</property>
+  		  <property name="fill">True</property>
+  		</packing>
+  	      </child>
+  	    </widget>
+  	    <packing>
+  	      <property name="padding">0</property>
+--- 436,507 ----
+  		  </child>
+  		</widget>
+  		<packing>
+! 		  <property name="padding">3</property>
+  		  <property name="expand">True</property>
+  		  <property name="fill">True</property>
+  		</packing>
+  	      </child>
++ 
++ 	      <child>
++ 		<widget class="GtkLabel" id="label260">
++ 		  <property name="visible">True</property>
++ 		  <property name="label" translatable="yes">Use the above ports to configure your router or firewall.</property>
++ 		  <property name="use_underline">False</property>
++ 		  <property name="use_markup">False</property>
++ 		  <property name="justify">GTK_JUSTIFY_LEFT</property>
++ 		  <property name="wrap">False</property>
++ 		  <property name="selectable">False</property>
++ 		  <property name="xalign">0</property>
++ 		  <property name="yalign">0.5</property>
++ 		  <property name="xpad">0</property>
++ 		  <property name="ypad">11</property>
++ 		</widget>
++ 		<packing>
++ 		  <property name="padding">0</property>
++ 		  <property name="expand">False</property>
++ 		  <property name="fill">False</property>
++ 		</packing>
++ 	      </child>
++ 
++ 	      <child>
++ 		<widget class="GtkCheckButton" id="DirectConnection">
++ 		  <property name="visible">True</property>
++ 		  <property name="can_focus">True</property>
++ 		  <property name="label" translatable="yes">I can receive direct connections</property>
++ 		  <property name="use_underline">True</property>
++ 		  <property name="relief">GTK_RELIEF_NORMAL</property>
++ 		  <property name="focus_on_click">True</property>
++ 		  <property name="active">False</property>
++ 		  <property name="inconsistent">False</property>
++ 		  <property name="draw_indicator">True</property>
++ 		</widget>
++ 		<packing>
++ 		  <property name="padding">0</property>
++ 		  <property name="expand">False</property>
++ 		  <property name="fill">False</property>
++ 		</packing>
++ 	      </child>
++ 
++ 	      <child>
++ 		<widget class="GtkLabel" id="label271">
++ 		  <property name="visible">True</property>
++ 		  <property name="label" translatable="yes">(only use if the above ports are remotely accessable)</property>
++ 		  <property name="use_underline">False</property>
++ 		  <property name="use_markup">False</property>
++ 		  <property name="justify">GTK_JUSTIFY_LEFT</property>
++ 		  <property name="wrap">False</property>
++ 		  <property name="selectable">False</property>
++ 		  <property name="xalign">0</property>
++ 		  <property name="yalign">0.5</property>
++ 		  <property name="xpad">0</property>
++ 		  <property name="ypad">0</property>
++ 		</widget>
++ 		<packing>
++ 		  <property name="padding">0</property>
++ 		  <property name="expand">False</property>
++ 		  <property name="fill">False</property>
++ 		</packing>
++ 	      </child>
+  	    </widget>
+  	    <packing>
+  	      <property name="padding">0</property>
+***************
+*** 490,501 ****
+  
+  <widget class="GtkWindow" id="SharesFrame">
+    <property name="visible">True</property>
+!   <property name="title" translatable="yes">window3</property>
+    <property name="type">GTK_WINDOW_TOPLEVEL</property>
+    <property name="window_position">GTK_WIN_POS_NONE</property>
+    <property name="modal">False</property>
+    <property name="resizable">True</property>
+    <property name="destroy_with_parent">False</property>
+  
+    <child>
+      <widget class="GtkFrame" id="Main">
+--- 536,552 ----
+  
+  <widget class="GtkWindow" id="SharesFrame">
+    <property name="visible">True</property>
+!   <property name="title" translatable="yes">Shares</property>
+    <property name="type">GTK_WINDOW_TOPLEVEL</property>
+    <property name="window_position">GTK_WIN_POS_NONE</property>
+    <property name="modal">False</property>
+    <property name="resizable">True</property>
+    <property name="destroy_with_parent">False</property>
++   <property name="decorated">True</property>
++   <property name="skip_taskbar_hint">False</property>
++   <property name="skip_pager_hint">False</property>
++   <property name="type_hint">GDK_WINDOW_TYPE_HINT_NORMAL</property>
++   <property name="gravity">GDK_GRAVITY_NORTH_WEST</property>
+  
+    <child>
+      <widget class="GtkFrame" id="Main">
+***************
+*** 569,574 ****
+--- 620,626 ----
+  		      <property name="visible">True</property>
+  		      <property name="can_focus">True</property>
+  		      <property name="relief">GTK_RELIEF_NORMAL</property>
++ 		      <property name="focus_on_click">True</property>
+  		      <signal name="clicked" handler="OnChooseIncompleteDir" last_modification_time="Sun, 27 Jul 2003 23:04:58 GMT"/>
+  
+  		      <child>
+***************
+*** 578,583 ****
+--- 630,639 ----
+  			  <property name="yalign">0.5</property>
+  			  <property name="xscale">0</property>
+  			  <property name="yscale">0</property>
++ 			  <property name="top_padding">0</property>
++ 			  <property name="bottom_padding">0</property>
++ 			  <property name="left_padding">0</property>
++ 			  <property name="right_padding">0</property>
+  
+  			  <child>
+  			    <widget class="GtkHBox" id="hbox152">
+***************
+*** 706,711 ****
+--- 762,768 ----
+  		      <property name="visible">True</property>
+  		      <property name="can_focus">True</property>
+  		      <property name="relief">GTK_RELIEF_NORMAL</property>
++ 		      <property name="focus_on_click">True</property>
+  		      <signal name="clicked" handler="OnChooseDownloadDir" last_modification_time="Sun, 27 Jul 2003 23:05:12 GMT"/>
+  
+  		      <child>
+***************
+*** 715,720 ****
+--- 772,781 ----
+  			  <property name="yalign">0.5</property>
+  			  <property name="xscale">0</property>
+  			  <property name="yscale">0</property>
++ 			  <property name="top_padding">0</property>
++ 			  <property name="bottom_padding">0</property>
++ 			  <property name="left_padding">0</property>
++ 			  <property name="right_padding">0</property>
+  
+  			  <child>
+  			    <widget class="GtkHBox" id="hbox153">
+***************
+*** 785,790 ****
+--- 846,852 ----
+  		  <property name="label" translatable="yes">Share download directory</property>
+  		  <property name="use_underline">True</property>
+  		  <property name="relief">GTK_RELIEF_NORMAL</property>
++ 		  <property name="focus_on_click">True</property>
+  		  <property name="active">False</property>
+  		  <property name="inconsistent">False</property>
+  		  <property name="draw_indicator">True</property>
+***************
+*** 849,854 ****
+--- 911,917 ----
+  		      <property name="visible">True</property>
+  		      <property name="can_focus">True</property>
+  		      <property name="relief">GTK_RELIEF_NORMAL</property>
++ 		      <property name="focus_on_click">True</property>
+  		      <signal name="clicked" handler="OnAddSharedDir" last_modification_time="Sun, 27 Jul 2003 23:03:35 GMT"/>
+  
+  		      <child>
+***************
+*** 858,863 ****
+--- 921,930 ----
+  			  <property name="yalign">0.5</property>
+  			  <property name="xscale">0</property>
+  			  <property name="yscale">0</property>
++ 			  <property name="top_padding">0</property>
++ 			  <property name="bottom_padding">0</property>
++ 			  <property name="left_padding">0</property>
++ 			  <property name="right_padding">0</property>
+  
+  			  <child>
+  			    <widget class="GtkHBox" id="hbox154">
+***************
+*** 919,924 ****
+--- 986,992 ----
+  		      <property name="visible">True</property>
+  		      <property name="can_focus">True</property>
+  		      <property name="relief">GTK_RELIEF_NORMAL</property>
++ 		      <property name="focus_on_click">True</property>
+  		      <signal name="clicked" handler="OnRemoveSharedDir" last_modification_time="Sun, 27 Jul 2003 23:03:48 GMT"/>
+  
+  		      <child>
+***************
+*** 928,933 ****
+--- 996,1005 ----
+  			  <property name="yalign">0.5</property>
+  			  <property name="xscale">0</property>
+  			  <property name="yscale">0</property>
++ 			  <property name="top_padding">0</property>
++ 			  <property name="bottom_padding">0</property>
++ 			  <property name="left_padding">0</property>
++ 			  <property name="right_padding">0</property>
+  
+  			  <child>
+  			    <widget class="GtkHBox" id="hbox155">
+***************
+*** 1005,1010 ****
+--- 1077,1083 ----
+  	      <property name="label" translatable="yes">Rescan shares on startup</property>
+  	      <property name="use_underline">True</property>
+  	      <property name="relief">GTK_RELIEF_NORMAL</property>
++ 	      <property name="focus_on_click">True</property>
+  	      <property name="active">False</property>
+  	      <property name="inconsistent">False</property>
+  	      <property name="draw_indicator">True</property>
+***************
+*** 1042,1053 ****
+  
+  <widget class="GtkWindow" id="TransfersFrame">
+    <property name="visible">True</property>
+!   <property name="title" translatable="yes">window4</property>
+    <property name="type">GTK_WINDOW_TOPLEVEL</property>
+    <property name="window_position">GTK_WIN_POS_NONE</property>
+    <property name="modal">False</property>
+    <property name="resizable">True</property>
+    <property name="destroy_with_parent">False</property>
+  
+    <child>
+      <widget class="GtkFrame" id="Main">
+--- 1115,1131 ----
+  
+  <widget class="GtkWindow" id="TransfersFrame">
+    <property name="visible">True</property>
+!   <property name="title" translatable="yes">Transfers</property>
+    <property name="type">GTK_WINDOW_TOPLEVEL</property>
+    <property name="window_position">GTK_WIN_POS_NONE</property>
+    <property name="modal">False</property>
+    <property name="resizable">True</property>
+    <property name="destroy_with_parent">False</property>
++   <property name="decorated">True</property>
++   <property name="skip_taskbar_hint">False</property>
++   <property name="skip_pager_hint">False</property>
++   <property name="type_hint">GDK_WINDOW_TYPE_HINT_NORMAL</property>
++   <property name="gravity">GDK_GRAVITY_NORTH_WEST</property>
+  
+    <child>
+      <widget class="GtkFrame" id="Main">
+***************
+*** 1070,1096 ****
+  	      <property name="spacing">0</property>
+  
+  	      <child>
+- 		<widget class="GtkLabel" id="label184">
+- 		  <property name="visible">True</property>
+- 		  <property name="label" translatable="yes">Locally queue uploads if:</property>
+- 		  <property name="use_underline">False</property>
+- 		  <property name="use_markup">False</property>
+- 		  <property name="justify">GTK_JUSTIFY_LEFT</property>
+- 		  <property name="wrap">False</property>
+- 		  <property name="selectable">False</property>
+- 		  <property name="xalign">0</property>
+- 		  <property name="yalign">0.5</property>
+- 		  <property name="xpad">0</property>
+- 		  <property name="ypad">0</property>
+- 		</widget>
+- 		<packing>
+- 		  <property name="padding">0</property>
+- 		  <property name="expand">False</property>
+- 		  <property name="fill">False</property>
+- 		</packing>
+- 	      </child>
+- 
+- 	      <child>
+  		<widget class="GtkHBox" id="hbox117">
+  		  <property name="visible">True</property>
+  		  <property name="homogeneous">False</property>
+--- 1148,1153 ----
+***************
+*** 1099,1105 ****
+  		  <child>
+  		    <widget class="GtkLabel" id="label185">
+  		      <property name="visible">True</property>
+! 		      <property name="label" translatable="yes">Upload speed exceeds </property>
+  		      <property name="use_underline">False</property>
+  		      <property name="use_markup">False</property>
+  		      <property name="justify">GTK_JUSTIFY_LEFT</property>
+--- 1156,1162 ----
+  		  <child>
+  		    <widget class="GtkLabel" id="label185">
+  		      <property name="visible">True</property>
+! 		      <property name="label" translatable="yes">If Uploads are sent at</property>
+  		      <property name="use_underline">False</property>
+  		      <property name="use_markup">False</property>
+  		      <property name="justify">GTK_JUSTIFY_LEFT</property>
+***************
+*** 1140,1146 ****
+  		  <child>
+  		    <widget class="GtkLabel" id="label186">
+  		      <property name="visible">True</property>
+! 		      <property name="label" translatable="yes">KBytes/sec</property>
+  		      <property name="use_underline">False</property>
+  		      <property name="use_markup">False</property>
+  		      <property name="justify">GTK_JUSTIFY_LEFT</property>
+--- 1197,1203 ----
+  		  <child>
+  		    <widget class="GtkLabel" id="label186">
+  		      <property name="visible">True</property>
+! 		      <property name="label" translatable="yes">KBytes/sec then</property>
+  		      <property name="use_underline">False</property>
+  		      <property name="use_markup">False</property>
+  		      <property name="justify">GTK_JUSTIFY_LEFT</property>
+***************
+*** 1166,1171 ****
+--- 1223,1250 ----
+  	      </child>
+  
+  	      <child>
++ 		<widget class="GtkLabel" id="label261">
++ 		  <property name="height_request">24</property>
++ 		  <property name="visible">True</property>
++ 		  <property name="label" translatable="yes">other uploads will be queued.</property>
++ 		  <property name="use_underline">False</property>
++ 		  <property name="use_markup">False</property>
++ 		  <property name="justify">GTK_JUSTIFY_LEFT</property>
++ 		  <property name="wrap">False</property>
++ 		  <property name="selectable">False</property>
++ 		  <property name="xalign">0</property>
++ 		  <property name="yalign">0</property>
++ 		  <property name="xpad">0</property>
++ 		  <property name="ypad">0</property>
++ 		</widget>
++ 		<packing>
++ 		  <property name="padding">0</property>
++ 		  <property name="expand">False</property>
++ 		  <property name="fill">False</property>
++ 		</packing>
++ 	      </child>
++ 
++ 	      <child>
+  		<widget class="GtkHBox" id="hbox118">
+  		  <property name="visible">True</property>
+  		  <property name="homogeneous">False</property>
+***************
+*** 1175,1183 ****
+  		    <widget class="GtkCheckButton" id="QueueUseSlots">
+  		      <property name="visible">True</property>
+  		      <property name="can_focus">True</property>
+! 		      <property name="label" translatable="yes">Number of uploads exceeds</property>
+  		      <property name="use_underline">True</property>
+  		      <property name="relief">GTK_RELIEF_NORMAL</property>
+  		      <property name="active">False</property>
+  		      <property name="inconsistent">False</property>
+  		      <property name="draw_indicator">True</property>
+--- 1254,1263 ----
+  		    <widget class="GtkCheckButton" id="QueueUseSlots">
+  		      <property name="visible">True</property>
+  		      <property name="can_focus">True</property>
+! 		      <property name="label" translatable="yes">Limit number of uploads to</property>
+  		      <property name="use_underline">True</property>
+  		      <property name="relief">GTK_RELIEF_NORMAL</property>
++ 		      <property name="focus_on_click">True</property>
+  		      <property name="active">False</property>
+  		      <property name="inconsistent">False</property>
+  		      <property name="draw_indicator">True</property>
+***************
+*** 1308,1313 ****
+--- 1388,1394 ----
+  		  <property name="label" translatable="yes">Limit uploads speed to</property>
+  		  <property name="use_underline">True</property>
+  		  <property name="relief">GTK_RELIEF_NORMAL</property>
++ 		  <property name="focus_on_click">True</property>
+  		  <property name="active">False</property>
+  		  <property name="inconsistent">False</property>
+  		  <property name="draw_indicator">True</property>
+***************
+*** 1330,1335 ****
+--- 1411,1417 ----
+  		  <property name="label" translatable="yes">per transfer</property>
+  		  <property name="use_underline">True</property>
+  		  <property name="relief">GTK_RELIEF_NORMAL</property>
++ 		  <property name="focus_on_click">True</property>
+  		  <property name="active">False</property>
+  		  <property name="inconsistent">False</property>
+  		  <property name="draw_indicator">True</property>
+***************
+*** 1351,1356 ****
+--- 1433,1439 ----
+  		  <property name="label" translatable="yes">total transfers</property>
+  		  <property name="use_underline">True</property>
+  		  <property name="relief">GTK_RELIEF_NORMAL</property>
++ 		  <property name="focus_on_click">True</property>
+  		  <property name="active">False</property>
+  		  <property name="inconsistent">False</property>
+  		  <property name="draw_indicator">True</property>
+***************
+*** 1388,1394 ****
+  		  <child>
+  		    <widget class="GtkLabel" id="label189">
+  		      <property name="visible">True</property>
+! 		      <property name="label" translatable="yes">A user may queue a maximum of</property>
+  		      <property name="use_underline">False</property>
+  		      <property name="use_markup">False</property>
+  		      <property name="justify">GTK_JUSTIFY_LEFT</property>
+--- 1471,1477 ----
+  		  <child>
+  		    <widget class="GtkLabel" id="label189">
+  		      <property name="visible">True</property>
+! 		      <property name="label" translatable="yes">Each user may queue a maximum of</property>
+  		      <property name="use_underline">False</property>
+  		      <property name="use_markup">False</property>
+  		      <property name="justify">GTK_JUSTIFY_LEFT</property>
+***************
+*** 1458,1466 ****
+  		<widget class="GtkCheckButton" id="FriendsNoLimits">
+  		  <property name="visible">True</property>
+  		  <property name="can_focus">True</property>
+! 		  <property name="label" translatable="yes">Queue limit does not apply to friends</property>
+  		  <property name="use_underline">True</property>
+  		  <property name="relief">GTK_RELIEF_NORMAL</property>
+  		  <property name="active">False</property>
+  		  <property name="inconsistent">False</property>
+  		  <property name="draw_indicator">True</property>
+--- 1541,1550 ----
+  		<widget class="GtkCheckButton" id="FriendsNoLimits">
+  		  <property name="visible">True</property>
+  		  <property name="can_focus">True</property>
+! 		  <property name="label" translatable="yes">Queue size limit does not apply to friends</property>
+  		  <property name="use_underline">True</property>
+  		  <property name="relief">GTK_RELIEF_NORMAL</property>
++ 		  <property name="focus_on_click">True</property>
+  		  <property name="active">False</property>
+  		  <property name="inconsistent">False</property>
+  		  <property name="draw_indicator">True</property>
+***************
+*** 1486,1491 ****
+--- 1570,1576 ----
+  	      <property name="label" translatable="yes">Share to friends only</property>
+  	      <property name="use_underline">True</property>
+  	      <property name="relief">GTK_RELIEF_NORMAL</property>
++ 	      <property name="focus_on_click">True</property>
+  	      <property name="active">False</property>
+  	      <property name="inconsistent">False</property>
+  	      <property name="draw_indicator">True</property>
+***************
+*** 1505,1510 ****
+--- 1590,1596 ----
+  	      <property name="label" translatable="yes">Privilege all my friends</property>
+  	      <property name="use_underline">True</property>
+  	      <property name="relief">GTK_RELIEF_NORMAL</property>
++ 	      <property name="focus_on_click">True</property>
+  	      <property name="active">False</property>
+  	      <property name="inconsistent">False</property>
+  	      <property name="draw_indicator">True</property>
+***************
+*** 1523,1528 ****
+--- 1609,1615 ----
+  	      <property name="label" translatable="yes">Lock incoming files (turn off for NFS)</property>
+  	      <property name="use_underline">True</property>
+  	      <property name="relief">GTK_RELIEF_NORMAL</property>
++ 	      <property name="focus_on_click">True</property>
+  	      <property name="active">False</property>
+  	      <property name="inconsistent">False</property>
+  	      <property name="draw_indicator">True</property>
+***************
+*** 1560,1571 ****
+  
+  <widget class="GtkWindow" id="UserinfoFrame">
+    <property name="visible">True</property>
+!   <property name="title" translatable="yes">window5</property>
+    <property name="type">GTK_WINDOW_TOPLEVEL</property>
+    <property name="window_position">GTK_WIN_POS_NONE</property>
+    <property name="modal">False</property>
+    <property name="resizable">True</property>
+    <property name="destroy_with_parent">False</property>
+  
+    <child>
+      <widget class="GtkFrame" id="Main">
+--- 1647,1663 ----
+  
+  <widget class="GtkWindow" id="UserinfoFrame">
+    <property name="visible">True</property>
+!   <property name="title" translatable="yes">Userinfo</property>
+    <property name="type">GTK_WINDOW_TOPLEVEL</property>
+    <property name="window_position">GTK_WIN_POS_NONE</property>
+    <property name="modal">False</property>
+    <property name="resizable">True</property>
+    <property name="destroy_with_parent">False</property>
++   <property name="decorated">True</property>
++   <property name="skip_taskbar_hint">False</property>
++   <property name="skip_pager_hint">False</property>
++   <property name="type_hint">GDK_WINDOW_TYPE_HINT_NORMAL</property>
++   <property name="gravity">GDK_GRAVITY_NORTH_WEST</property>
+  
+    <child>
+      <widget class="GtkFrame" id="Main">
+***************
+*** 1629,1634 ****
+--- 1721,1728 ----
+  			  <property name="visible">True</property>
+  			  <property name="can_focus">True</property>
+  			  <property name="editable">True</property>
++ 			  <property name="overwrite">False</property>
++ 			  <property name="accepts_tab">True</property>
+  			  <property name="justification">GTK_JUSTIFY_LEFT</property>
+  			  <property name="wrap_mode">GTK_WRAP_WORD</property>
+  			  <property name="cursor_visible">True</property>
+***************
+*** 1664,1669 ****
+--- 1758,1784 ----
+  	  </child>
+  
+  	  <child>
++ 	    <widget class="GtkLabel" id="label265">
++ 	      <property name="visible">True</property>
++ 	      <property name="label" translatable="yes">Image:</property>
++ 	      <property name="use_underline">False</property>
++ 	      <property name="use_markup">False</property>
++ 	      <property name="justify">GTK_JUSTIFY_LEFT</property>
++ 	      <property name="wrap">False</property>
++ 	      <property name="selectable">False</property>
++ 	      <property name="xalign">0</property>
++ 	      <property name="yalign">0.5</property>
++ 	      <property name="xpad">0</property>
++ 	      <property name="ypad">0</property>
++ 	    </widget>
++ 	    <packing>
++ 	      <property name="padding">0</property>
++ 	      <property name="expand">False</property>
++ 	      <property name="fill">False</property>
++ 	    </packing>
++ 	  </child>
++ 
++ 	  <child>
+  	    <widget class="GtkHBox" id="hbox122">
+  	      <property name="visible">True</property>
+  	      <property name="homogeneous">False</property>
+***************
+*** 1694,1699 ****
+--- 1809,1815 ----
+  		  <property name="visible">True</property>
+  		  <property name="can_focus">True</property>
+  		  <property name="relief">GTK_RELIEF_NORMAL</property>
++ 		  <property name="focus_on_click">True</property>
+  		  <signal name="clicked" handler="OnChooseImage" last_modification_time="Sun, 27 Jul 2003 23:39:24 GMT"/>
+  
+  		  <child>
+***************
+*** 1703,1708 ****
+--- 1819,1828 ----
+  		      <property name="yalign">0.5</property>
+  		      <property name="xscale">0</property>
+  		      <property name="yscale">0</property>
++ 		      <property name="top_padding">0</property>
++ 		      <property name="bottom_padding">0</property>
++ 		      <property name="left_padding">0</property>
++ 		      <property name="right_padding">0</property>
+  
+  		      <child>
+  			<widget class="GtkHBox" id="hbox151">
+***************
+*** 1792,1803 ****
+  
+  <widget class="GtkWindow" id="BloatFrame">
+    <property name="visible">True</property>
+!   <property name="title" translatable="yes">window6</property>
+    <property name="type">GTK_WINDOW_TOPLEVEL</property>
+    <property name="window_position">GTK_WIN_POS_NONE</property>
+    <property name="modal">False</property>
+    <property name="resizable">True</property>
+    <property name="destroy_with_parent">False</property>
+  
+    <child>
+      <widget class="GtkFrame" id="Main">
+--- 1912,1928 ----
+  
+  <widget class="GtkWindow" id="BloatFrame">
+    <property name="visible">True</property>
+!   <property name="title" translatable="yes">Bloat</property>
+    <property name="type">GTK_WINDOW_TOPLEVEL</property>
+    <property name="window_position">GTK_WIN_POS_NONE</property>
+    <property name="modal">False</property>
+    <property name="resizable">True</property>
+    <property name="destroy_with_parent">False</property>
++   <property name="decorated">True</property>
++   <property name="skip_taskbar_hint">False</property>
++   <property name="skip_pager_hint">False</property>
++   <property name="type_hint">GDK_WINDOW_TYPE_HINT_NORMAL</property>
++   <property name="gravity">GDK_GRAVITY_NORTH_WEST</property>
+  
+    <child>
+      <widget class="GtkFrame" id="Main">
+***************
+*** 1820,1825 ****
+--- 1945,1951 ----
+  	      <property name="label" translatable="yes">Close-buttons on tabs (requires restart)</property>
+  	      <property name="use_underline">True</property>
+  	      <property name="relief">GTK_RELIEF_NORMAL</property>
++ 	      <property name="focus_on_click">True</property>
+  	      <property name="active">False</property>
+  	      <property name="inconsistent">False</property>
+  	      <property name="draw_indicator">True</property>
+***************
+*** 1845,1850 ****
+--- 1971,1977 ----
+  		  <property name="visible">True</property>
+  		  <property name="can_focus">True</property>
+  		  <property name="relief">GTK_RELIEF_NORMAL</property>
++ 		  <property name="focus_on_click">True</property>
+  
+  		  <child>
+  		    <widget class="GtkAlignment" id="alignment35">
+***************
+*** 1853,1858 ****
+--- 1980,1989 ----
+  		      <property name="yalign">0.5</property>
+  		      <property name="xscale">0</property>
+  		      <property name="yscale">0</property>
++ 		      <property name="top_padding">0</property>
++ 		      <property name="bottom_padding">0</property>
++ 		      <property name="left_padding">0</property>
++ 		      <property name="right_padding">0</property>
+  
+  		      <child>
+  			<widget class="GtkHBox" id="hbox124">
+***************
+*** 1939,1944 ****
+--- 2070,2076 ----
+  		  <property name="visible">True</property>
+  		  <property name="can_focus">True</property>
+  		  <property name="relief">GTK_RELIEF_NORMAL</property>
++ 		  <property name="focus_on_click">True</property>
+  
+  		  <child>
+  		    <widget class="GtkAlignment" id="alignment36">
+***************
+*** 1947,1952 ****
+--- 2079,2088 ----
+  		      <property name="yalign">0.5</property>
+  		      <property name="xscale">0</property>
+  		      <property name="yscale">0</property>
++ 		      <property name="top_padding">0</property>
++ 		      <property name="bottom_padding">0</property>
++ 		      <property name="left_padding">0</property>
++ 		      <property name="right_padding">0</property>
+  
+  		      <child>
+  			<widget class="GtkHBox" id="hbox125">
+***************
+*** 2011,2016 ****
+--- 2147,2153 ----
+  		  <property name="visible">True</property>
+  		  <property name="can_focus">True</property>
+  		  <property name="relief">GTK_RELIEF_NORMAL</property>
++ 		  <property name="focus_on_click">True</property>
+  
+  		  <child>
+  		    <widget class="GtkAlignment" id="alignment43">
+***************
+*** 2019,2024 ****
+--- 2156,2165 ----
+  		      <property name="yalign">0.5</property>
+  		      <property name="xscale">0</property>
+  		      <property name="yscale">0</property>
++ 		      <property name="top_padding">0</property>
++ 		      <property name="bottom_padding">0</property>
++ 		      <property name="left_padding">0</property>
++ 		      <property name="right_padding">0</property>
+  
+  		      <child>
+  			<widget class="GtkHBox" id="hbox132">
+***************
+*** 2084,2089 ****
+--- 2225,2231 ----
+  		  <property name="visible">True</property>
+  		  <property name="can_focus">True</property>
+  		  <property name="relief">GTK_RELIEF_NORMAL</property>
++ 		  <property name="focus_on_click">True</property>
+  
+  		  <child>
+  		    <widget class="GtkAlignment" id="alignment44">
+***************
+*** 2092,2097 ****
+--- 2234,2243 ----
+  		      <property name="yalign">0.5</property>
+  		      <property name="xscale">0</property>
+  		      <property name="yscale">0</property>
++ 		      <property name="top_padding">0</property>
++ 		      <property name="bottom_padding">0</property>
++ 		      <property name="left_padding">0</property>
++ 		      <property name="right_padding">0</property>
+  
+  		      <child>
+  			<widget class="GtkHBox" id="hbox133">
+***************
+*** 2157,2162 ****
+--- 2303,2309 ----
+  		  <property name="visible">True</property>
+  		  <property name="can_focus">True</property>
+  		  <property name="relief">GTK_RELIEF_NORMAL</property>
++ 		  <property name="focus_on_click">True</property>
+  
+  		  <child>
+  		    <widget class="GtkAlignment" id="alignment45">
+***************
+*** 2165,2170 ****
+--- 2312,2321 ----
+  		      <property name="yalign">0.5</property>
+  		      <property name="xscale">0</property>
+  		      <property name="yscale">0</property>
++ 		      <property name="top_padding">0</property>
++ 		      <property name="bottom_padding">0</property>
++ 		      <property name="left_padding">0</property>
++ 		      <property name="right_padding">0</property>
+  
+  		      <child>
+  			<widget class="GtkHBox" id="hbox134">
+***************
+*** 2230,2235 ****
+--- 2381,2387 ----
+  		  <property name="visible">True</property>
+  		  <property name="can_focus">True</property>
+  		  <property name="relief">GTK_RELIEF_NORMAL</property>
++ 		  <property name="focus_on_click">True</property>
+  
+  		  <child>
+  		    <widget class="GtkAlignment" id="alignment40">
+***************
+*** 2238,2243 ****
+--- 2390,2399 ----
+  		      <property name="yalign">0.5</property>
+  		      <property name="xscale">0</property>
+  		      <property name="yscale">0</property>
++ 		      <property name="top_padding">0</property>
++ 		      <property name="bottom_padding">0</property>
++ 		      <property name="left_padding">0</property>
++ 		      <property name="right_padding">0</property>
+  
+  		      <child>
+  			<widget class="GtkHBox" id="hbox129">
+***************
+*** 2302,2307 ****
+--- 2458,2464 ----
+  		  <property name="visible">True</property>
+  		  <property name="can_focus">True</property>
+  		  <property name="relief">GTK_RELIEF_NORMAL</property>
++ 		  <property name="focus_on_click">True</property>
+  
+  		  <child>
+  		    <widget class="GtkAlignment" id="alignment41">
+***************
+*** 2310,2315 ****
+--- 2467,2476 ----
+  		      <property name="yalign">0.5</property>
+  		      <property name="xscale">0</property>
+  		      <property name="yscale">0</property>
++ 		      <property name="top_padding">0</property>
++ 		      <property name="bottom_padding">0</property>
++ 		      <property name="left_padding">0</property>
++ 		      <property name="right_padding">0</property>
+  
+  		      <child>
+  			<widget class="GtkHBox" id="hbox130">
+***************
+*** 2374,2379 ****
+--- 2535,2541 ----
+  		  <property name="visible">True</property>
+  		  <property name="can_focus">True</property>
+  		  <property name="relief">GTK_RELIEF_NORMAL</property>
++ 		  <property name="focus_on_click">True</property>
+  
+  		  <child>
+  		    <widget class="GtkAlignment" id="alignment42">
+***************
+*** 2382,2387 ****
+--- 2544,2553 ----
+  		      <property name="yalign">0.5</property>
+  		      <property name="xscale">0</property>
+  		      <property name="yscale">0</property>
++ 		      <property name="top_padding">0</property>
++ 		      <property name="bottom_padding">0</property>
++ 		      <property name="left_padding">0</property>
++ 		      <property name="right_padding">0</property>
+  
+  		      <child>
+  			<widget class="GtkHBox" id="hbox131">
+***************
+*** 2533,2538 ****
+--- 2699,2705 ----
+  		  <property name="visible">True</property>
+  		  <property name="can_focus">True</property>
+  		  <property name="relief">GTK_RELIEF_NORMAL</property>
++ 		  <property name="focus_on_click">True</property>
+  
+  		  <child>
+  		    <widget class="GtkAlignment" id="alignment46">
+***************
+*** 2541,2546 ****
+--- 2708,2717 ----
+  		      <property name="yalign">0.5</property>
+  		      <property name="xscale">0</property>
+  		      <property name="yscale">0</property>
++ 		      <property name="top_padding">0</property>
++ 		      <property name="bottom_padding">0</property>
++ 		      <property name="left_padding">0</property>
++ 		      <property name="right_padding">0</property>
+  
+  		      <child>
+  			<widget class="GtkHBox" id="hbox135">
+***************
+*** 2606,2611 ****
+--- 2777,2783 ----
+  		  <property name="visible">True</property>
+  		  <property name="can_focus">True</property>
+  		  <property name="relief">GTK_RELIEF_NORMAL</property>
++ 		  <property name="focus_on_click">True</property>
+  
+  		  <child>
+  		    <widget class="GtkAlignment" id="alignment47">
+***************
+*** 2614,2619 ****
+--- 2786,2795 ----
+  		      <property name="yalign">0.5</property>
+  		      <property name="xscale">0</property>
+  		      <property name="yscale">0</property>
++ 		      <property name="top_padding">0</property>
++ 		      <property name="bottom_padding">0</property>
++ 		      <property name="left_padding">0</property>
++ 		      <property name="right_padding">0</property>
+  
+  		      <child>
+  			<widget class="GtkHBox" id="hbox136">
+***************
+*** 2721,2726 ****
+--- 2897,2903 ----
+  		  <property name="visible">True</property>
+  		  <property name="can_focus">True</property>
+  		  <property name="relief">GTK_RELIEF_NORMAL</property>
++ 		  <property name="focus_on_click">True</property>
+  
+  		  <child>
+  		    <widget class="GtkAlignment" id="alignment48">
+***************
+*** 2729,2734 ****
+--- 2906,2915 ----
+  		      <property name="yalign">0.5</property>
+  		      <property name="xscale">0</property>
+  		      <property name="yscale">0</property>
++ 		      <property name="top_padding">0</property>
++ 		      <property name="bottom_padding">0</property>
++ 		      <property name="left_padding">0</property>
++ 		      <property name="right_padding">0</property>
+  
+  		      <child>
+  			<widget class="GtkHBox" id="hbox137">
+***************
+*** 2793,2798 ****
+--- 2974,2980 ----
+  		  <property name="visible">True</property>
+  		  <property name="can_focus">True</property>
+  		  <property name="relief">GTK_RELIEF_NORMAL</property>
++ 		  <property name="focus_on_click">True</property>
+  
+  		  <child>
+  		    <widget class="GtkAlignment" id="alignment49">
+***************
+*** 2801,2806 ****
+--- 2983,2992 ----
+  		      <property name="yalign">0.5</property>
+  		      <property name="xscale">0</property>
+  		      <property name="yscale">0</property>
++ 		      <property name="top_padding">0</property>
++ 		      <property name="bottom_padding">0</property>
++ 		      <property name="left_padding">0</property>
++ 		      <property name="right_padding">0</property>
+  
+  		      <child>
+  			<widget class="GtkHBox" id="hbox138">
+***************
+*** 2989,3000 ****
+  
+  <widget class="GtkWindow" id="LogFrame">
+    <property name="visible">True</property>
+!   <property name="title" translatable="yes">window7</property>
+    <property name="type">GTK_WINDOW_TOPLEVEL</property>
+    <property name="window_position">GTK_WIN_POS_NONE</property>
+    <property name="modal">False</property>
+    <property name="resizable">True</property>
+    <property name="destroy_with_parent">False</property>
+  
+    <child>
+      <widget class="GtkFrame" id="Main">
+--- 3175,3191 ----
+  
+  <widget class="GtkWindow" id="LogFrame">
+    <property name="visible">True</property>
+!   <property name="title" translatable="yes">Log</property>
+    <property name="type">GTK_WINDOW_TOPLEVEL</property>
+    <property name="window_position">GTK_WIN_POS_NONE</property>
+    <property name="modal">False</property>
+    <property name="resizable">True</property>
+    <property name="destroy_with_parent">False</property>
++   <property name="decorated">True</property>
++   <property name="skip_taskbar_hint">False</property>
++   <property name="skip_pager_hint">False</property>
++   <property name="type_hint">GDK_WINDOW_TYPE_HINT_NORMAL</property>
++   <property name="gravity">GDK_GRAVITY_NORTH_WEST</property>
+  
+    <child>
+      <widget class="GtkFrame" id="Main">
+***************
+*** 3017,3022 ****
+--- 3208,3214 ----
+  	      <property name="label" translatable="yes">Log private chat by default</property>
+  	      <property name="use_underline">True</property>
+  	      <property name="relief">GTK_RELIEF_NORMAL</property>
++ 	      <property name="focus_on_click">True</property>
+  	      <property name="active">False</property>
+  	      <property name="inconsistent">False</property>
+  	      <property name="draw_indicator">True</property>
+***************
+*** 3035,3040 ****
+--- 3227,3233 ----
+  	      <property name="label" translatable="yes">Log chatrooms by default</property>
+  	      <property name="use_underline">True</property>
+  	      <property name="relief">GTK_RELIEF_NORMAL</property>
++ 	      <property name="focus_on_click">True</property>
+  	      <property name="active">False</property>
+  	      <property name="inconsistent">False</property>
+  	      <property name="draw_indicator">True</property>
+***************
+*** 3053,3058 ****
+--- 3246,3252 ----
+  	      <property name="label" translatable="yes">Log transfers</property>
+  	      <property name="use_underline">True</property>
+  	      <property name="relief">GTK_RELIEF_NORMAL</property>
++ 	      <property name="focus_on_click">True</property>
+  	      <property name="active">False</property>
+  	      <property name="inconsistent">False</property>
+  	      <property name="draw_indicator">True</property>
+***************
+*** 3121,3126 ****
+--- 3315,3321 ----
+  		      <property name="visible">True</property>
+  		      <property name="can_focus">True</property>
+  		      <property name="relief">GTK_RELIEF_NORMAL</property>
++ 		      <property name="focus_on_click">True</property>
+  		      <signal name="clicked" handler="OnChooseLogDir" last_modification_time="Mon, 28 Jul 2003 00:27:04 GMT"/>
+  
+  		      <child>
+***************
+*** 3130,3135 ****
+--- 3325,3334 ----
+  			  <property name="yalign">0.5</property>
+  			  <property name="xscale">0</property>
+  			  <property name="yscale">0</property>
++ 			  <property name="top_padding">0</property>
++ 			  <property name="bottom_padding">0</property>
++ 			  <property name="left_padding">0</property>
++ 			  <property name="right_padding">0</property>
+  
+  			  <child>
+  			    <widget class="GtkHBox" id="hbox148">
+***************
+*** 3226,3237 ****
+  
+  <widget class="GtkWindow" id="BanFrame">
+    <property name="visible">True</property>
+!   <property name="title" translatable="yes">window8</property>
+    <property name="type">GTK_WINDOW_TOPLEVEL</property>
+    <property name="window_position">GTK_WIN_POS_NONE</property>
+    <property name="modal">False</property>
+    <property name="resizable">True</property>
+    <property name="destroy_with_parent">False</property>
+  
+    <child>
+      <widget class="GtkFrame" id="Main">
+--- 3425,3441 ----
+  
+  <widget class="GtkWindow" id="BanFrame">
+    <property name="visible">True</property>
+!   <property name="title" translatable="yes">Ban</property>
+    <property name="type">GTK_WINDOW_TOPLEVEL</property>
+    <property name="window_position">GTK_WIN_POS_NONE</property>
+    <property name="modal">False</property>
+    <property name="resizable">True</property>
+    <property name="destroy_with_parent">False</property>
++   <property name="decorated">True</property>
++   <property name="skip_taskbar_hint">False</property>
++   <property name="skip_pager_hint">False</property>
++   <property name="type_hint">GDK_WINDOW_TYPE_HINT_NORMAL</property>
++   <property name="gravity">GDK_GRAVITY_NORTH_WEST</property>
+  
+    <child>
+      <widget class="GtkFrame" id="Main">
+***************
+*** 3313,3318 ****
+--- 3517,3523 ----
+  		      <property name="visible">True</property>
+  		      <property name="can_focus">True</property>
+  		      <property name="relief">GTK_RELIEF_NORMAL</property>
++ 		      <property name="focus_on_click">True</property>
+  		      <signal name="clicked" handler="OnAddBanned" last_modification_time="Sat, 02 Aug 2003 14:09:59 GMT"/>
+  
+  		      <child>
+***************
+*** 3322,3327 ****
+--- 3527,3536 ----
+  			  <property name="yalign">0.5</property>
+  			  <property name="xscale">0</property>
+  			  <property name="yscale">0</property>
++ 			  <property name="top_padding">0</property>
++ 			  <property name="bottom_padding">0</property>
++ 			  <property name="left_padding">0</property>
++ 			  <property name="right_padding">0</property>
+  
+  			  <child>
+  			    <widget class="GtkHBox" id="hbox156">
+***************
+*** 3383,3388 ****
+--- 3592,3598 ----
+  		      <property name="visible">True</property>
+  		      <property name="can_focus">True</property>
+  		      <property name="relief">GTK_RELIEF_NORMAL</property>
++ 		      <property name="focus_on_click">True</property>
+  		      <signal name="clicked" handler="OnRemoveBanned" last_modification_time="Sat, 02 Aug 2003 14:10:07 GMT"/>
+  
+  		      <child>
+***************
+*** 3392,3397 ****
+--- 3602,3611 ----
+  			  <property name="yalign">0.5</property>
+  			  <property name="xscale">0</property>
+  			  <property name="yscale">0</property>
++ 			  <property name="top_padding">0</property>
++ 			  <property name="bottom_padding">0</property>
++ 			  <property name="left_padding">0</property>
++ 			  <property name="right_padding">0</property>
+  
+  			  <child>
+  			    <widget class="GtkHBox" id="hbox157">
+***************
+*** 3453,3458 ****
+--- 3667,3673 ----
+  		      <property name="visible">True</property>
+  		      <property name="can_focus">True</property>
+  		      <property name="relief">GTK_RELIEF_NORMAL</property>
++ 		      <property name="focus_on_click">True</property>
+  		      <signal name="clicked" handler="OnClearBanned" last_modification_time="Sat, 02 Aug 2003 14:10:31 GMT"/>
+  
+  		      <child>
+***************
+*** 3462,3467 ****
+--- 3677,3686 ----
+  			  <property name="yalign">0.5</property>
+  			  <property name="xscale">0</property>
+  			  <property name="yscale">0</property>
++ 			  <property name="top_padding">0</property>
++ 			  <property name="bottom_padding">0</property>
++ 			  <property name="left_padding">0</property>
++ 			  <property name="right_padding">0</property>
+  
+  			  <child>
+  			    <widget class="GtkHBox" id="hbox158">
+***************
+*** 3585,3590 ****
+--- 3804,3810 ----
+  		      <property name="visible">True</property>
+  		      <property name="can_focus">True</property>
+  		      <property name="relief">GTK_RELIEF_NORMAL</property>
++ 		      <property name="focus_on_click">True</property>
+  		      <signal name="clicked" handler="OnAddIgnored" last_modification_time="Sat, 02 Aug 2003 14:10:44 GMT"/>
+  
+  		      <child>
+***************
+*** 3594,3599 ****
+--- 3814,3823 ----
+  			  <property name="yalign">0.5</property>
+  			  <property name="xscale">0</property>
+  			  <property name="yscale">0</property>
++ 			  <property name="top_padding">0</property>
++ 			  <property name="bottom_padding">0</property>
++ 			  <property name="left_padding">0</property>
++ 			  <property name="right_padding">0</property>
+  
+  			  <child>
+  			    <widget class="GtkHBox" id="hbox159">
+***************
+*** 3655,3660 ****
+--- 3879,3885 ----
+  		      <property name="visible">True</property>
+  		      <property name="can_focus">True</property>
+  		      <property name="relief">GTK_RELIEF_NORMAL</property>
++ 		      <property name="focus_on_click">True</property>
+  		      <signal name="clicked" handler="OnRemoveIgnored" last_modification_time="Sat, 02 Aug 2003 14:10:54 GMT"/>
+  
+  		      <child>
+***************
+*** 3664,3669 ****
+--- 3889,3898 ----
+  			  <property name="yalign">0.5</property>
+  			  <property name="xscale">0</property>
+  			  <property name="yscale">0</property>
++ 			  <property name="top_padding">0</property>
++ 			  <property name="bottom_padding">0</property>
++ 			  <property name="left_padding">0</property>
++ 			  <property name="right_padding">0</property>
+  
+  			  <child>
+  			    <widget class="GtkHBox" id="hbox160">
+***************
+*** 3725,3730 ****
+--- 3954,3960 ----
+  		      <property name="visible">True</property>
+  		      <property name="can_focus">True</property>
+  		      <property name="relief">GTK_RELIEF_NORMAL</property>
++ 		      <property name="focus_on_click">True</property>
+  		      <signal name="clicked" handler="OnClearIgnored" last_modification_time="Sat, 02 Aug 2003 14:11:03 GMT"/>
+  
+  		      <child>
+***************
+*** 3734,3739 ****
+--- 3964,3973 ----
+  			  <property name="yalign">0.5</property>
+  			  <property name="xscale">0</property>
+  			  <property name="yscale">0</property>
++ 			  <property name="top_padding">0</property>
++ 			  <property name="bottom_padding">0</property>
++ 			  <property name="left_padding">0</property>
++ 			  <property name="right_padding">0</property>
+  
+  			  <child>
+  			    <widget class="GtkHBox" id="hbox161">
+***************
+*** 3817,3822 ****
+--- 4051,4057 ----
+  		  <property name="label" translatable="yes">Use custom ban message:</property>
+  		  <property name="use_underline">True</property>
+  		  <property name="relief">GTK_RELIEF_NORMAL</property>
++ 		  <property name="focus_on_click">True</property>
+  		  <property name="active">False</property>
+  		  <property name="inconsistent">False</property>
+  		  <property name="draw_indicator">True</property>
+***************
+*** 3881,3892 ****
+  
+  <widget class="GtkWindow" id="SearchFrame">
+    <property name="visible">True</property>
+!   <property name="title" translatable="yes">window9</property>
+    <property name="type">GTK_WINDOW_TOPLEVEL</property>
+    <property name="window_position">GTK_WIN_POS_NONE</property>
+    <property name="modal">False</property>
+    <property name="resizable">True</property>
+    <property name="destroy_with_parent">False</property>
+  
+    <child>
+      <widget class="GtkFrame" id="Main">
+--- 4116,4132 ----
+  
+  <widget class="GtkWindow" id="SearchFrame">
+    <property name="visible">True</property>
+!   <property name="title" translatable="yes">Search</property>
+    <property name="type">GTK_WINDOW_TOPLEVEL</property>
+    <property name="window_position">GTK_WIN_POS_NONE</property>
+    <property name="modal">False</property>
+    <property name="resizable">True</property>
+    <property name="destroy_with_parent">False</property>
++   <property name="decorated">True</property>
++   <property name="skip_taskbar_hint">False</property>
++   <property name="skip_pager_hint">False</property>
++   <property name="type_hint">GDK_WINDOW_TYPE_HINT_NORMAL</property>
++   <property name="gravity">GDK_GRAVITY_NORTH_WEST</property>
+  
+    <child>
+      <widget class="GtkFrame" id="Main">
+***************
+*** 3903,3908 ****
+--- 4143,4169 ----
+  	  <property name="spacing">10</property>
+  
+  	  <child>
++ 	    <widget class="GtkLabel" id="label262">
++ 	      <property name="visible">True</property>
++ 	      <property name="label" translatable="yes">Network Searches:</property>
++ 	      <property name="use_underline">False</property>
++ 	      <property name="use_markup">False</property>
++ 	      <property name="justify">GTK_JUSTIFY_LEFT</property>
++ 	      <property name="wrap">False</property>
++ 	      <property name="selectable">False</property>
++ 	      <property name="xalign">0</property>
++ 	      <property name="yalign">0</property>
++ 	      <property name="xpad">0</property>
++ 	      <property name="ypad">0</property>
++ 	    </widget>
++ 	    <packing>
++ 	      <property name="padding">0</property>
++ 	      <property name="expand">False</property>
++ 	      <property name="fill">False</property>
++ 	    </packing>
++ 	  </child>
++ 
++ 	  <child>
+  	    <widget class="GtkHBox" id="hbox147">
+  	      <property name="visible">True</property>
+  	      <property name="homogeneous">False</property>
+***************
+*** 3911,3923 ****
+  	      <child>
+  		<widget class="GtkLabel" id="label225">
+  		  <property name="visible">True</property>
+! 		  <property name="label" translatable="yes">Return a max of</property>
+  		  <property name="use_underline">False</property>
+  		  <property name="use_markup">False</property>
+  		  <property name="justify">GTK_JUSTIFY_LEFT</property>
+  		  <property name="wrap">False</property>
+  		  <property name="selectable">False</property>
+! 		  <property name="xalign">0.5</property>
+  		  <property name="yalign">0.5</property>
+  		  <property name="xpad">0</property>
+  		  <property name="ypad">0</property>
+--- 4172,4184 ----
+  	      <child>
+  		<widget class="GtkLabel" id="label225">
+  		  <property name="visible">True</property>
+! 		  <property name="label" translatable="yes">Send out a max of</property>
+  		  <property name="use_underline">False</property>
+  		  <property name="use_markup">False</property>
+  		  <property name="justify">GTK_JUSTIFY_LEFT</property>
+  		  <property name="wrap">False</property>
+  		  <property name="selectable">False</property>
+! 		  <property name="xalign">1</property>
+  		  <property name="yalign">0.5</property>
+  		  <property name="xpad">0</property>
+  		  <property name="ypad">0</property>
+***************
+*** 3978,3989 ****
+--- 4239,4272 ----
+  	  </child>
+  
+  	  <child>
++ 	    <widget class="GtkLabel" id="label263">
++ 	      <property name="visible">True</property>
++ 	      <property name="label" translatable="yes">Your Searches:</property>
++ 	      <property name="use_underline">False</property>
++ 	      <property name="use_markup">False</property>
++ 	      <property name="justify">GTK_JUSTIFY_LEFT</property>
++ 	      <property name="wrap">False</property>
++ 	      <property name="selectable">False</property>
++ 	      <property name="xalign">0</property>
++ 	      <property name="yalign">0.5</property>
++ 	      <property name="xpad">0</property>
++ 	      <property name="ypad">0</property>
++ 	    </widget>
++ 	    <packing>
++ 	      <property name="padding">0</property>
++ 	      <property name="expand">False</property>
++ 	      <property name="fill">False</property>
++ 	    </packing>
++ 	  </child>
++ 
++ 	  <child>
+  	    <widget class="GtkCheckButton" id="RegexpFilters">
+  	      <property name="visible">True</property>
+  	      <property name="can_focus">True</property>
+  	      <property name="label" translatable="yes">Use regular expressions for filter in &amp; out</property>
+  	      <property name="use_underline">True</property>
+  	      <property name="relief">GTK_RELIEF_NORMAL</property>
++ 	      <property name="focus_on_click">True</property>
+  	      <property name="active">False</property>
+  	      <property name="inconsistent">False</property>
+  	      <property name="draw_indicator">True</property>
+***************
+*** 4002,4007 ****
+--- 4285,4291 ----
+  	      <property name="label" translatable="yes">Enable filters by default</property>
+  	      <property name="use_underline">True</property>
+  	      <property name="relief">GTK_RELIEF_NORMAL</property>
++ 	      <property name="focus_on_click">True</property>
+  	      <property name="active">False</property>
+  	      <property name="inconsistent">False</property>
+  	      <property name="draw_indicator">True</property>
+***************
+*** 4238,4243 ****
+--- 4522,4528 ----
+  		  <property name="label" translatable="yes">Free slot</property>
+  		  <property name="use_underline">True</property>
+  		  <property name="relief">GTK_RELIEF_NORMAL</property>
++ 		  <property name="focus_on_click">True</property>
+  		  <property name="active">False</property>
+  		  <property name="inconsistent">False</property>
+  		  <property name="draw_indicator">True</property>
+***************
+*** 4351,4356 ****
+--- 4636,4646 ----
+    <property name="default_height">400</property>
+    <property name="resizable">True</property>
+    <property name="destroy_with_parent">False</property>
++   <property name="decorated">True</property>
++   <property name="skip_taskbar_hint">False</property>
++   <property name="skip_pager_hint">False</property>
++   <property name="type_hint">GDK_WINDOW_TYPE_HINT_NORMAL</property>
++   <property name="gravity">GDK_GRAVITY_NORTH_WEST</property>
+  
+    <child>
+      <widget class="GtkVBox" id="vbox94">
+***************
+*** 4439,4444 ****
+--- 4729,4735 ----
+  	      <property name="label">gtk-apply</property>
+  	      <property name="use_stock">True</property>
+  	      <property name="relief">GTK_RELIEF_NORMAL</property>
++ 	      <property name="focus_on_click">True</property>
+  	      <signal name="clicked" handler="OnApply" last_modification_time="Sun, 27 Jul 2003 20:52:02 GMT"/>
+  	    </widget>
+  	  </child>
+***************
+*** 4451,4456 ****
+--- 4742,4748 ----
+  	      <property name="label">gtk-ok</property>
+  	      <property name="use_stock">True</property>
+  	      <property name="relief">GTK_RELIEF_NORMAL</property>
++ 	      <property name="focus_on_click">True</property>
+  	      <signal name="clicked" handler="OnOk" last_modification_time="Sun, 27 Jul 2003 20:52:18 GMT"/>
+  	    </widget>
+  	  </child>
+***************
+*** 4463,4468 ****
+--- 4755,4761 ----
+  	      <property name="label">gtk-cancel</property>
+  	      <property name="use_stock">True</property>
+  	      <property name="relief">GTK_RELIEF_NORMAL</property>
++ 	      <property name="focus_on_click">True</property>
+  	      <signal name="clicked" handler="OnCancel" last_modification_time="Sun, 27 Jul 2003 20:52:31 GMT"/>
+  	    </widget>
+  	  </child>
+***************
+*** 4479,4490 ****
+  
+  <widget class="GtkWindow" id="AwayFrame">
+    <property name="visible">True</property>
+!   <property name="title" translatable="yes">window1</property>
+    <property name="type">GTK_WINDOW_TOPLEVEL</property>
+    <property name="window_position">GTK_WIN_POS_NONE</property>
+    <property name="modal">False</property>
+    <property name="resizable">True</property>
+    <property name="destroy_with_parent">False</property>
+  
+    <child>
+      <widget class="GtkFrame" id="Main">
+--- 4772,4788 ----
+  
+  <widget class="GtkWindow" id="AwayFrame">
+    <property name="visible">True</property>
+!   <property name="title" translatable="yes">Away</property>
+    <property name="type">GTK_WINDOW_TOPLEVEL</property>
+    <property name="window_position">GTK_WIN_POS_NONE</property>
+    <property name="modal">False</property>
+    <property name="resizable">True</property>
+    <property name="destroy_with_parent">False</property>
++   <property name="decorated">True</property>
++   <property name="skip_taskbar_hint">False</property>
++   <property name="skip_pager_hint">False</property>
++   <property name="type_hint">GDK_WINDOW_TYPE_HINT_NORMAL</property>
++   <property name="gravity">GDK_GRAVITY_NORTH_WEST</property>
+  
+    <child>
+      <widget class="GtkFrame" id="Main">
+***************
+*** 4656,4667 ****
+  
+  <widget class="GtkWindow" id="EventsFrame">
+    <property name="visible">True</property>
+!   <property name="title" translatable="yes">window2</property>
+    <property name="type">GTK_WINDOW_TOPLEVEL</property>
+    <property name="window_position">GTK_WIN_POS_NONE</property>
+    <property name="modal">False</property>
+    <property name="resizable">True</property>
+    <property name="destroy_with_parent">False</property>
+  
+    <child>
+      <widget class="GtkFrame" id="Main">
+--- 4954,4970 ----
+  
+  <widget class="GtkWindow" id="EventsFrame">
+    <property name="visible">True</property>
+!   <property name="title" translatable="yes">Events</property>
+    <property name="type">GTK_WINDOW_TOPLEVEL</property>
+    <property name="window_position">GTK_WIN_POS_NONE</property>
+    <property name="modal">False</property>
+    <property name="resizable">True</property>
+    <property name="destroy_with_parent">False</property>
++   <property name="decorated">True</property>
++   <property name="skip_taskbar_hint">False</property>
++   <property name="skip_pager_hint">False</property>
++   <property name="type_hint">GDK_WINDOW_TYPE_HINT_NORMAL</property>
++   <property name="gravity">GDK_GRAVITY_NORTH_WEST</property>
+  
+    <child>
+      <widget class="GtkFrame" id="Main">
+***************
+*** 4812,4823 ****
+  
+  <widget class="GtkWindow" id="GeoBlockFrame">
+    <property name="visible">True</property>
+!   <property name="title" translatable="yes">window1</property>
+    <property name="type">GTK_WINDOW_TOPLEVEL</property>
+    <property name="window_position">GTK_WIN_POS_NONE</property>
+    <property name="modal">False</property>
+    <property name="resizable">True</property>
+    <property name="destroy_with_parent">False</property>
+  
+    <child>
+      <widget class="GtkFrame" id="Main">
+--- 5115,5131 ----
+  
+  <widget class="GtkWindow" id="GeoBlockFrame">
+    <property name="visible">True</property>
+!   <property name="title" translatable="yes">GeoBlock</property>
+    <property name="type">GTK_WINDOW_TOPLEVEL</property>
+    <property name="window_position">GTK_WIN_POS_NONE</property>
+    <property name="modal">False</property>
+    <property name="resizable">True</property>
+    <property name="destroy_with_parent">False</property>
++   <property name="decorated">True</property>
++   <property name="skip_taskbar_hint">False</property>
++   <property name="skip_pager_hint">False</property>
++   <property name="type_hint">GDK_WINDOW_TYPE_HINT_NORMAL</property>
++   <property name="gravity">GDK_GRAVITY_NORTH_WEST</property>
+  
+    <child>
+      <widget class="GtkFrame" id="Main">
+***************
+*** 4840,4845 ****
+--- 5148,5154 ----
+  	      <property name="label" translatable="yes">Enable geographical blocker</property>
+  	      <property name="use_underline">True</property>
+  	      <property name="relief">GTK_RELIEF_NORMAL</property>
++ 	      <property name="focus_on_click">True</property>
+  	      <property name="active">False</property>
+  	      <property name="inconsistent">False</property>
+  	      <property name="draw_indicator">True</property>
+***************
+*** 4859,4864 ****
+--- 5168,5174 ----
+  	      <property name="label" translatable="yes">Geographical paranoia (block unresolvable IPs)</property>
+  	      <property name="use_underline">True</property>
+  	      <property name="relief">GTK_RELIEF_NORMAL</property>
++ 	      <property name="focus_on_click">True</property>
+  	      <property name="active">False</property>
+  	      <property name="inconsistent">False</property>
+  	      <property name="draw_indicator">True</property>
+***************
+*** 4936,4947 ****
+  
+  <widget class="GtkWindow" id="UrlCatchFrame">
+    <property name="visible">True</property>
+!   <property name="title" translatable="yes">window1</property>
+    <property name="type">GTK_WINDOW_TOPLEVEL</property>
+    <property name="window_position">GTK_WIN_POS_NONE</property>
+    <property name="modal">False</property>
+    <property name="resizable">True</property>
+    <property name="destroy_with_parent">False</property>
+  
+    <child>
+      <widget class="GtkFrame" id="Main">
+--- 5246,5262 ----
+  
+  <widget class="GtkWindow" id="UrlCatchFrame">
+    <property name="visible">True</property>
+!   <property name="title" translatable="yes">UrlCatch</property>
+    <property name="type">GTK_WINDOW_TOPLEVEL</property>
+    <property name="window_position">GTK_WIN_POS_NONE</property>
+    <property name="modal">False</property>
+    <property name="resizable">True</property>
+    <property name="destroy_with_parent">False</property>
++   <property name="decorated">True</property>
++   <property name="skip_taskbar_hint">False</property>
++   <property name="skip_pager_hint">False</property>
++   <property name="type_hint">GDK_WINDOW_TYPE_HINT_NORMAL</property>
++   <property name="gravity">GDK_GRAVITY_NORTH_WEST</property>
+  
+    <child>
+      <widget class="GtkFrame" id="Main">
+***************
+*** 4964,4969 ****
+--- 5279,5285 ----
+  	      <property name="label" translatable="yes">Enable URL catching</property>
+  	      <property name="use_underline">True</property>
+  	      <property name="relief">GTK_RELIEF_NORMAL</property>
++ 	      <property name="focus_on_click">True</property>
+  	      <property name="active">False</property>
+  	      <property name="inconsistent">False</property>
+  	      <property name="draw_indicator">True</property>
+***************
+*** 4983,4988 ****
+--- 5299,5305 ----
+  	      <property name="label" translatable="yes">Humanize slsk:// urls</property>
+  	      <property name="use_underline">True</property>
+  	      <property name="relief">GTK_RELIEF_NORMAL</property>
++ 	      <property name="focus_on_click">True</property>
+  	      <property name="active">False</property>
+  	      <property name="inconsistent">False</property>
+  	      <property name="draw_indicator">True</property>
+***************
+*** 5148,5153 ****
+--- 5465,5471 ----
+  		  <property name="label" translatable="yes">Update</property>
+  		  <property name="use_underline">True</property>
+  		  <property name="relief">GTK_RELIEF_NORMAL</property>
++ 		  <property name="focus_on_click">True</property>
+  		  <signal name="clicked" handler="OnUpdate" last_modification_time="Wed, 13 Aug 2003 19:14:26 GMT"/>
+  		</widget>
+  		<packing>
+***************
+*** 5167,5172 ****
+--- 5485,5491 ----
+  		  <property name="label" translatable="yes">Remove</property>
+  		  <property name="use_underline">True</property>
+  		  <property name="relief">GTK_RELIEF_NORMAL</property>
++ 		  <property name="focus_on_click">True</property>
+  		  <signal name="clicked" handler="OnRemove" last_modification_time="Wed, 13 Aug 2003 19:21:32 GMT"/>
+  		</widget>
+  		<packing>
+***************
+*** 5210,5213 ****
+--- 5529,6045 ----
+    </child>
+  </widget>
+  
++ <widget class="GtkWindow" id="ConnectionFrame">
++   <property name="visible">True</property>
++   <property name="title" translatable="yes">Connection</property>
++   <property name="type">GTK_WINDOW_TOPLEVEL</property>
++   <property name="window_position">GTK_WIN_POS_NONE</property>
++   <property name="modal">False</property>
++   <property name="resizable">True</property>
++   <property name="destroy_with_parent">False</property>
++   <property name="decorated">True</property>
++   <property name="skip_taskbar_hint">False</property>
++   <property name="skip_pager_hint">False</property>
++   <property name="type_hint">GDK_WINDOW_TYPE_HINT_NORMAL</property>
++   <property name="gravity">GDK_GRAVITY_NORTH_WEST</property>
++ 
++   <child>
++     <widget class="GtkFrame" id="Main">
++       <property name="visible">True</property>
++       <property name="label_xalign">0</property>
++       <property name="label_yalign">0</property>
++       <property name="shadow_type">GTK_SHADOW_ETCHED_IN</property>
++ 
++       <child>
++ 	<widget class="GtkAlignment" id="alignment68">
++ 	  <property name="visible">True</property>
++ 	  <property name="xalign">0.5</property>
++ 	  <property name="yalign">0.5</property>
++ 	  <property name="xscale">1</property>
++ 	  <property name="yscale">1</property>
++ 	  <property name="top_padding">4</property>
++ 	  <property name="bottom_padding">1</property>
++ 	  <property name="left_padding">1</property>
++ 	  <property name="right_padding">1</property>
++ 
++ 	  <child>
++ 	    <widget class="GtkVBox" id="vbox100">
++ 	      <property name="border_width">2</property>
++ 	      <property name="visible">True</property>
++ 	      <property name="homogeneous">False</property>
++ 	      <property name="spacing">6</property>
++ 
++ 	      <child>
++ 		<widget class="GtkLabel" id="label267">
++ 		  <property name="visible">True</property>
++ 		  <property name="label" translatable="yes">Choose Server to configure the server you wish to connect to, your username, password and connection ports.</property>
++ 		  <property name="use_underline">False</property>
++ 		  <property name="use_markup">False</property>
++ 		  <property name="justify">GTK_JUSTIFY_LEFT</property>
++ 		  <property name="wrap">True</property>
++ 		  <property name="selectable">False</property>
++ 		  <property name="xalign">0</property>
++ 		  <property name="yalign">0</property>
++ 		  <property name="xpad">8</property>
++ 		  <property name="ypad">0</property>
++ 		</widget>
++ 		<packing>
++ 		  <property name="padding">0</property>
++ 		  <property name="expand">False</property>
++ 		  <property name="fill">False</property>
++ 		</packing>
++ 	      </child>
++ 
++ 	      <child>
++ 		<widget class="GtkLabel" id="label268">
++ 		  <property name="visible">True</property>
++ 		  <property name="label" translatable="yes">Choose Shares to configure your Download and Shared directories.</property>
++ 		  <property name="use_underline">False</property>
++ 		  <property name="use_markup">False</property>
++ 		  <property name="justify">GTK_JUSTIFY_LEFT</property>
++ 		  <property name="wrap">True</property>
++ 		  <property name="selectable">False</property>
++ 		  <property name="xalign">0</property>
++ 		  <property name="yalign">0</property>
++ 		  <property name="xpad">8</property>
++ 		  <property name="ypad">0</property>
++ 		</widget>
++ 		<packing>
++ 		  <property name="padding">0</property>
++ 		  <property name="expand">False</property>
++ 		  <property name="fill">False</property>
++ 		</packing>
++ 	      </child>
++ 
++ 	      <child>
++ 		<widget class="GtkLabel" id="label269">
++ 		  <property name="visible">True</property>
++ 		  <property name="label" translatable="yes">Choose Transfers to configure how uploads are queued and what privileges are given to your friends.</property>
++ 		  <property name="use_underline">False</property>
++ 		  <property name="use_markup">False</property>
++ 		  <property name="justify">GTK_JUSTIFY_LEFT</property>
++ 		  <property name="wrap">True</property>
++ 		  <property name="selectable">False</property>
++ 		  <property name="xalign">0</property>
++ 		  <property name="yalign">0</property>
++ 		  <property name="xpad">8</property>
++ 		  <property name="ypad">0</property>
++ 		</widget>
++ 		<packing>
++ 		  <property name="padding">0</property>
++ 		  <property name="expand">False</property>
++ 		  <property name="fill">False</property>
++ 		</packing>
++ 	      </child>
++ 
++ 	      <child>
++ 		<widget class="GtkLabel" id="label284">
++ 		  <property name="visible">True</property>
++ 		  <property name="label" translatable="yes">Choose Geo Block (if available) to control from which countries users are allowed access to your shares.</property>
++ 		  <property name="use_underline">False</property>
++ 		  <property name="use_markup">False</property>
++ 		  <property name="justify">GTK_JUSTIFY_LEFT</property>
++ 		  <property name="wrap">True</property>
++ 		  <property name="selectable">False</property>
++ 		  <property name="xalign">0</property>
++ 		  <property name="yalign">0</property>
++ 		  <property name="xpad">8</property>
++ 		  <property name="ypad">0</property>
++ 		</widget>
++ 		<packing>
++ 		  <property name="padding">0</property>
++ 		  <property name="expand">False</property>
++ 		  <property name="fill">False</property>
++ 		</packing>
++ 	      </child>
++ 
++ 	      <child>
++ 		<widget class="GtkLabel" id="label285">
++ 		  <property name="visible">True</property>
++ 		  <property name="label" translatable="yes">If you wish to use Geo Block, install GeoIP and it's Python Bindings from your distro's packaging tool or from:</property>
++ 		  <property name="use_underline">False</property>
++ 		  <property name="use_markup">False</property>
++ 		  <property name="justify">GTK_JUSTIFY_LEFT</property>
++ 		  <property name="wrap">True</property>
++ 		  <property name="selectable">False</property>
++ 		  <property name="xalign">0</property>
++ 		  <property name="yalign">0</property>
++ 		  <property name="xpad">8</property>
++ 		  <property name="ypad">0</property>
++ 		</widget>
++ 		<packing>
++ 		  <property name="padding">0</property>
++ 		  <property name="expand">False</property>
++ 		  <property name="fill">False</property>
++ 		</packing>
++ 	      </child>
++ 
++ 	      <child>
++ 		<widget class="GtkLabel" id="label286">
++ 		  <property name="visible">True</property>
++ 		  <property name="label" translatable="yes">http://www.maxmind.com/app/c</property>
++ 		  <property name="use_underline">False</property>
++ 		  <property name="use_markup">False</property>
++ 		  <property name="justify">GTK_JUSTIFY_LEFT</property>
++ 		  <property name="wrap">False</property>
++ 		  <property name="selectable">False</property>
++ 		  <property name="xalign">0</property>
++ 		  <property name="yalign">0</property>
++ 		  <property name="xpad">8</property>
++ 		  <property name="ypad">0</property>
++ 		</widget>
++ 		<packing>
++ 		  <property name="padding">0</property>
++ 		  <property name="expand">False</property>
++ 		  <property name="fill">False</property>
++ 		</packing>
++ 	      </child>
++ 
++ 	      <child>
++ 		<widget class="GtkLabel" id="label287">
++ 		  <property name="visible">True</property>
++ 		  <property name="label" translatable="yes">http://www.maxmind.com/app/python</property>
++ 		  <property name="use_underline">False</property>
++ 		  <property name="use_markup">False</property>
++ 		  <property name="justify">GTK_JUSTIFY_LEFT</property>
++ 		  <property name="wrap">False</property>
++ 		  <property name="selectable">False</property>
++ 		  <property name="xalign">0</property>
++ 		  <property name="yalign">0</property>
++ 		  <property name="xpad">8</property>
++ 		  <property name="ypad">0</property>
++ 		</widget>
++ 		<packing>
++ 		  <property name="padding">0</property>
++ 		  <property name="expand">False</property>
++ 		  <property name="fill">False</property>
++ 		</packing>
++ 	      </child>
++ 	    </widget>
++ 	  </child>
++ 	</widget>
++       </child>
++ 
++       <child>
++ 	<widget class="GtkLabel" id="label266">
++ 	  <property name="visible">True</property>
++ 	  <property name="label" translatable="yes">Connection Settings</property>
++ 	  <property name="use_underline">False</property>
++ 	  <property name="use_markup">True</property>
++ 	  <property name="justify">GTK_JUSTIFY_LEFT</property>
++ 	  <property name="wrap">False</property>
++ 	  <property name="selectable">False</property>
++ 	  <property name="xalign">0.5</property>
++ 	  <property name="yalign">0.5</property>
++ 	  <property name="xpad">0</property>
++ 	  <property name="ypad">0</property>
++ 	</widget>
++ 	<packing>
++ 	  <property name="type">label_item</property>
++ 	</packing>
++       </child>
++     </widget>
++   </child>
++ </widget>
++ 
++ <widget class="GtkWindow" id="UIFrame">
++   <property name="visible">True</property>
++   <property name="title" translatable="yes">UI</property>
++   <property name="type">GTK_WINDOW_TOPLEVEL</property>
++   <property name="window_position">GTK_WIN_POS_NONE</property>
++   <property name="modal">False</property>
++   <property name="resizable">True</property>
++   <property name="destroy_with_parent">False</property>
++   <property name="decorated">True</property>
++   <property name="skip_taskbar_hint">False</property>
++   <property name="skip_pager_hint">False</property>
++   <property name="type_hint">GDK_WINDOW_TYPE_HINT_NORMAL</property>
++   <property name="gravity">GDK_GRAVITY_NORTH_WEST</property>
++ 
++   <child>
++     <widget class="GtkFrame" id="Main">
++       <property name="visible">True</property>
++       <property name="label_xalign">0</property>
++       <property name="label_yalign">0.5</property>
++       <property name="shadow_type">GTK_SHADOW_ETCHED_IN</property>
++ 
++       <child>
++ 	<widget class="GtkAlignment" id="alignment69">
++ 	  <property name="visible">True</property>
++ 	  <property name="xalign">0</property>
++ 	  <property name="yalign">0</property>
++ 	  <property name="xscale">1</property>
++ 	  <property name="yscale">1</property>
++ 	  <property name="top_padding">4</property>
++ 	  <property name="bottom_padding">1</property>
++ 	  <property name="left_padding">1</property>
++ 	  <property name="right_padding">1</property>
++ 
++ 	  <child>
++ 	    <widget class="GtkVBox" id="vbox101">
++ 	      <property name="border_width">2</property>
++ 	      <property name="visible">True</property>
++ 	      <property name="homogeneous">False</property>
++ 	      <property name="spacing">6</property>
++ 
++ 	      <child>
++ 		<widget class="GtkLabel" id="label272">
++ 		  <property name="visible">True</property>
++ 		  <property name="label" translatable="yes">Choose Interface to configure text color and other settings.</property>
++ 		  <property name="use_underline">False</property>
++ 		  <property name="use_markup">False</property>
++ 		  <property name="justify">GTK_JUSTIFY_LEFT</property>
++ 		  <property name="wrap">True</property>
++ 		  <property name="selectable">False</property>
++ 		  <property name="xalign">0</property>
++ 		  <property name="yalign">0</property>
++ 		  <property name="xpad">8</property>
++ 		  <property name="ypad">0</property>
++ 		</widget>
++ 		<packing>
++ 		  <property name="padding">0</property>
++ 		  <property name="expand">False</property>
++ 		  <property name="fill">False</property>
++ 		</packing>
++ 	      </child>
++ 
++ 	      <child>
++ 		<widget class="GtkLabel" id="label273">
++ 		  <property name="visible">True</property>
++ 		  <property name="label" translatable="yes">Choose URL Catching to configure the programs used when clicking on links.</property>
++ 		  <property name="use_underline">False</property>
++ 		  <property name="use_markup">False</property>
++ 		  <property name="justify">GTK_JUSTIFY_LEFT</property>
++ 		  <property name="wrap">True</property>
++ 		  <property name="selectable">False</property>
++ 		  <property name="xalign">0</property>
++ 		  <property name="yalign">0</property>
++ 		  <property name="xpad">8</property>
++ 		  <property name="ypad">0</property>
++ 		</widget>
++ 		<packing>
++ 		  <property name="padding">0</property>
++ 		  <property name="expand">False</property>
++ 		  <property name="fill">False</property>
++ 		</packing>
++ 	      </child>
++ 	    </widget>
++ 	  </child>
++ 	</widget>
++       </child>
++ 
++       <child>
++ 	<widget class="GtkLabel" id="label276">
++ 	  <property name="visible">True</property>
++ 	  <property name="label" translatable="yes">User Interface Settings</property>
++ 	  <property name="use_underline">False</property>
++ 	  <property name="use_markup">True</property>
++ 	  <property name="justify">GTK_JUSTIFY_LEFT</property>
++ 	  <property name="wrap">False</property>
++ 	  <property name="selectable">False</property>
++ 	  <property name="xalign">0.5</property>
++ 	  <property name="yalign">0.5</property>
++ 	  <property name="xpad">0</property>
++ 	  <property name="ypad">0</property>
++ 	</widget>
++ 	<packing>
++ 	  <property name="type">label_item</property>
++ 	</packing>
++       </child>
++     </widget>
++   </child>
++ </widget>
++ 
++ <widget class="GtkWindow" id="MiscFrame">
++   <property name="visible">True</property>
++   <property name="title" translatable="yes">Misc</property>
++   <property name="type">GTK_WINDOW_TOPLEVEL</property>
++   <property name="window_position">GTK_WIN_POS_NONE</property>
++   <property name="modal">False</property>
++   <property name="resizable">True</property>
++   <property name="destroy_with_parent">False</property>
++   <property name="decorated">True</property>
++   <property name="skip_taskbar_hint">False</property>
++   <property name="skip_pager_hint">False</property>
++   <property name="type_hint">GDK_WINDOW_TYPE_HINT_NORMAL</property>
++   <property name="gravity">GDK_GRAVITY_NORTH_WEST</property>
++ 
++   <child>
++     <widget class="GtkFrame" id="Main">
++       <property name="visible">True</property>
++       <property name="label_xalign">0</property>
++       <property name="label_yalign">0.5</property>
++       <property name="shadow_type">GTK_SHADOW_ETCHED_IN</property>
++ 
++       <child>
++ 	<widget class="GtkAlignment" id="alignment70">
++ 	  <property name="visible">True</property>
++ 	  <property name="xalign">0</property>
++ 	  <property name="yalign">0</property>
++ 	  <property name="xscale">1</property>
++ 	  <property name="yscale">1</property>
++ 	  <property name="top_padding">4</property>
++ 	  <property name="bottom_padding">1</property>
++ 	  <property name="left_padding">1</property>
++ 	  <property name="right_padding">1</property>
++ 
++ 	  <child>
++ 	    <widget class="GtkVBox" id="vbox102">
++ 	      <property name="border_width">2</property>
++ 	      <property name="visible">True</property>
++ 	      <property name="homogeneous">False</property>
++ 	      <property name="spacing">6</property>
++ 
++ 	      <child>
++ 		<widget class="GtkLabel" id="label277">
++ 		  <property name="visible">True</property>
++ 		  <property name="label" translatable="yes">Choose Away mode to configure your auto-away settings.</property>
++ 		  <property name="use_underline">False</property>
++ 		  <property name="use_markup">False</property>
++ 		  <property name="justify">GTK_JUSTIFY_LEFT</property>
++ 		  <property name="wrap">True</property>
++ 		  <property name="selectable">False</property>
++ 		  <property name="xalign">0</property>
++ 		  <property name="yalign">0</property>
++ 		  <property name="xpad">8</property>
++ 		  <property name="ypad">0</property>
++ 		</widget>
++ 		<packing>
++ 		  <property name="padding">0</property>
++ 		  <property name="expand">False</property>
++ 		  <property name="fill">False</property>
++ 		</packing>
++ 	      </child>
++ 
++ 	      <child>
++ 		<widget class="GtkLabel" id="label278">
++ 		  <property name="visible">True</property>
++ 		  <property name="label" translatable="yes">Choose User info to add text and an image to your personal info.</property>
++ 		  <property name="use_underline">False</property>
++ 		  <property name="use_markup">False</property>
++ 		  <property name="justify">GTK_JUSTIFY_LEFT</property>
++ 		  <property name="wrap">True</property>
++ 		  <property name="selectable">False</property>
++ 		  <property name="xalign">0</property>
++ 		  <property name="yalign">0</property>
++ 		  <property name="xpad">8</property>
++ 		  <property name="ypad">0</property>
++ 		</widget>
++ 		<packing>
++ 		  <property name="padding">0</property>
++ 		  <property name="expand">False</property>
++ 		  <property name="fill">False</property>
++ 		</packing>
++ 	      </child>
++ 
++ 	      <child>
++ 		<widget class="GtkLabel" id="label280">
++ 		  <property name="visible">True</property>
++ 		  <property name="label" translatable="yes">Choose Ban / ignore to manage your ban list and ignore list.</property>
++ 		  <property name="use_underline">False</property>
++ 		  <property name="use_markup">False</property>
++ 		  <property name="justify">GTK_JUSTIFY_LEFT</property>
++ 		  <property name="wrap">True</property>
++ 		  <property name="selectable">False</property>
++ 		  <property name="xalign">0</property>
++ 		  <property name="yalign">0</property>
++ 		  <property name="xpad">8</property>
++ 		  <property name="ypad">0</property>
++ 		</widget>
++ 		<packing>
++ 		  <property name="padding">0</property>
++ 		  <property name="expand">False</property>
++ 		  <property name="fill">False</property>
++ 		</packing>
++ 	      </child>
++ 
++ 	      <child>
++ 		<widget class="GtkLabel" id="label281">
++ 		  <property name="visible">True</property>
++ 		  <property name="label" translatable="yes">Choose Logging to configure what's logged and where to save the logs.</property>
++ 		  <property name="use_underline">False</property>
++ 		  <property name="use_markup">False</property>
++ 		  <property name="justify">GTK_JUSTIFY_LEFT</property>
++ 		  <property name="wrap">True</property>
++ 		  <property name="selectable">False</property>
++ 		  <property name="xalign">0</property>
++ 		  <property name="yalign">0</property>
++ 		  <property name="xpad">8</property>
++ 		  <property name="ypad">0</property>
++ 		</widget>
++ 		<packing>
++ 		  <property name="padding">0</property>
++ 		  <property name="expand">False</property>
++ 		  <property name="fill">False</property>
++ 		</packing>
++ 	      </child>
++ 
++ 	      <child>
++ 		<widget class="GtkLabel" id="label282">
++ 		  <property name="visible">True</property>
++ 		  <property name="label" translatable="yes">Choose Searches to configure search settings and to set default search filters.</property>
++ 		  <property name="use_underline">False</property>
++ 		  <property name="use_markup">False</property>
++ 		  <property name="justify">GTK_JUSTIFY_LEFT</property>
++ 		  <property name="wrap">True</property>
++ 		  <property name="selectable">False</property>
++ 		  <property name="xalign">0</property>
++ 		  <property name="yalign">0</property>
++ 		  <property name="xpad">8</property>
++ 		  <property name="ypad">0</property>
++ 		</widget>
++ 		<packing>
++ 		  <property name="padding">0</property>
++ 		  <property name="expand">False</property>
++ 		  <property name="fill">False</property>
++ 		</packing>
++ 	      </child>
++ 
++ 	      <child>
++ 		<widget class="GtkLabel" id="label283">
++ 		  <property name="visible">True</property>
++ 		  <property name="label" translatable="yes">Choose Events to configure what commands are executed upon the completion of downloads.</property>
++ 		  <property name="use_underline">False</property>
++ 		  <property name="use_markup">False</property>
++ 		  <property name="justify">GTK_JUSTIFY_LEFT</property>
++ 		  <property name="wrap">True</property>
++ 		  <property name="selectable">False</property>
++ 		  <property name="xalign">0</property>
++ 		  <property name="yalign">0</property>
++ 		  <property name="xpad">8</property>
++ 		  <property name="ypad">0</property>
++ 		</widget>
++ 		<packing>
++ 		  <property name="padding">0</property>
++ 		  <property name="expand">False</property>
++ 		  <property name="fill">False</property>
++ 		</packing>
++ 	      </child>
++ 	    </widget>
++ 	  </child>
++ 	</widget>
++       </child>
++ 
++       <child>
++ 	<widget class="GtkLabel" id="label279">
++ 	  <property name="visible">True</property>
++ 	  <property name="label" translatable="yes">Miscellaneous Settings</property>
++ 	  <property name="use_underline">False</property>
++ 	  <property name="use_markup">True</property>
++ 	  <property name="justify">GTK_JUSTIFY_LEFT</property>
++ 	  <property name="wrap">False</property>
++ 	  <property name="selectable">False</property>
++ 	  <property name="xalign">0.5</property>
++ 	  <property name="yalign">0.5</property>
++ 	  <property name="xpad">0</property>
++ 	  <property name="ypad">0</property>
++ 	</widget>
++ 	<packing>
++ 	  <property name="type">label_item</property>
++ 	</packing>
++       </child>
++     </widget>
++   </child>
++ </widget>
++ 
+  </glade-interface>
+diff -rc nicotine-1.0.8/pynicotine/gtkgui/settings_glade.py nicotine-daelstorm/pynicotine/gtkgui/settings_glade.py
+*** nicotine-1.0.8/pynicotine/gtkgui/settings_glade.py	2004-01-08 00:08:26.000000000 +0200
+--- nicotine-daelstorm/pynicotine/gtkgui/settings_glade.py	2004-12-23 14:02:10.000000000 +0200
+***************
+*** 9,15 ****
+               self.accel_group = accel_group
+          if create:
+              self.ServerFrame = gtk.Window(gtk.WINDOW_TOPLEVEL)
+!             self.ServerFrame.set_title(_("window2"))
+              self.ServerFrame.set_position(gtk.WIN_POS_NONE)
+              self.ServerFrame.add_accel_group(self.accel_group)
+              self.ServerFrame.show()
+--- 9,15 ----
+               self.accel_group = accel_group
+          if create:
+              self.ServerFrame = gtk.Window(gtk.WINDOW_TOPLEVEL)
+!             self.ServerFrame.set_title(_("Server Settings"))
+              self.ServerFrame.set_position(gtk.WIN_POS_NONE)
+              self.ServerFrame.add_accel_group(self.accel_group)
+              self.ServerFrame.show()
+***************
+*** 27,36 ****
+          self.vbox72.show()
+          self.vbox72.set_spacing(0)
+  
+!         self.label166 = gtk.Label(_("Server: (use mail.slsk.org:2240 for the main server)"))
+          self.label166.set_alignment(0, 0)
+!         self.label166.set_size_request(123, -1)
+          self.label166.set_padding(0, 0)
+          self.label166.show()
+          self.vbox72.pack_start(self.label166, gtk.FALSE, gtk.FALSE, 3)
+  
+--- 27,37 ----
+          self.vbox72.show()
+          self.vbox72.set_spacing(0)
+  
+!         self.label166 = gtk.Label(_("Server: (use server.slsknet.org:2240 for the main server)"))
+          self.label166.set_alignment(0, 0)
+!         self.label166.set_size_request(360, -1)
+          self.label166.set_padding(0, 0)
++         self.label166.set_line_wrap(gtk.TRUE)
+          self.label166.show()
+          self.vbox72.pack_start(self.label166, gtk.FALSE, gtk.FALSE, 3)
+  
+***************
+*** 69,79 ****
+          self.label167.set_alignment(0, 0.5)
+          self.label167.set_size_request(57, -1)
+          self.label167.set_padding(0, 0)
+          self.label167.show()
+          self.vbox73.pack_start(self.label167, gtk.FALSE, gtk.FALSE, 0)
+  
+          self.Login = gtk.Entry()
+!         self.Login.set_size_request(100, -1)
+          self.Login.set_text("")
+          self.Login.set_editable(gtk.TRUE)
+          self.Login.show()
+--- 70,81 ----
+          self.label167.set_alignment(0, 0.5)
+          self.label167.set_size_request(57, -1)
+          self.label167.set_padding(0, 0)
++         self.label167.set_line_wrap(gtk.FALSE)
+          self.label167.show()
+          self.vbox73.pack_start(self.label167, gtk.FALSE, gtk.FALSE, 0)
+  
+          self.Login = gtk.Entry()
+!         self.Login.set_size_request(130, -1)
+          self.Login.set_text("")
+          self.Login.set_editable(gtk.TRUE)
+          self.Login.show()
+***************
+*** 93,98 ****
+--- 95,101 ----
+          self.label168.set_alignment(0, 0)
+          self.label168.set_size_request(5, -1)
+          self.label168.set_padding(0, 0)
++         self.label168.set_line_wrap(gtk.FALSE)
+          self.label168.show()
+          self.vbox74.pack_start(self.label168, gtk.FALSE, gtk.FALSE, 0)
+  
+***************
+*** 113,120 ****
+  
+          self.label169 = gtk.Label(_("Network Character Encoding (utf-8 is a good choice)"))
+          self.label169.set_alignment(0.05, 0.5)
+-         self.label169.set_size_request(129, -1)
+          self.label169.set_padding(0, 0)
+          self.label169.show()
+          self.vbox75.pack_start(self.label169, gtk.FALSE, gtk.FALSE, 0)
+  
+--- 116,123 ----
+  
+          self.label169 = gtk.Label(_("Network Character Encoding (utf-8 is a good choice)"))
+          self.label169.set_alignment(0.05, 0.5)
+          self.label169.set_padding(0, 0)
++         self.label169.set_line_wrap(gtk.FALSE)
+          self.label169.show()
+          self.vbox75.pack_start(self.label169, gtk.FALSE, gtk.FALSE, 0)
+  
+***************
+*** 144,164 ****
+          self.vbox76.show()
+          self.vbox76.set_spacing(0)
+  
+-         self.DirectConnection = gtk.CheckButton()
+-         self.DirectConnection.set_active(gtk.FALSE)
+-         self.DirectConnection.set_label(_("I can receive direct connections"))
+-         self.DirectConnection.show()
+-         self.vbox76.pack_start(self.DirectConnection, gtk.FALSE, gtk.FALSE, 0)
+- 
+          self.label172 = gtk.Label(_("Client connection ports (use first available):"))
+          self.label172.set_alignment(0, 0.5)
+-         self.label172.set_size_request(30, -1)
+          self.label172.set_padding(0, 0)
+          self.label172.show()
+!         self.vbox76.pack_start(self.label172, gtk.TRUE, gtk.TRUE, 3)
+  
+          self.hbox106 = gtk.HBox(gtk.FALSE, 5)
+!         self.hbox106.set_size_request(40, -1)
+          self.hbox106.show()
+          self.hbox106.set_spacing(5)
+  
+--- 147,161 ----
+          self.vbox76.show()
+          self.vbox76.set_spacing(0)
+  
+          self.label172 = gtk.Label(_("Client connection ports (use first available):"))
+          self.label172.set_alignment(0, 0.5)
+          self.label172.set_padding(0, 0)
++         self.label172.set_line_wrap(gtk.FALSE)
+          self.label172.show()
+!         self.vbox76.pack_start(self.label172, gtk.FALSE, gtk.FALSE, 0)
+  
+          self.hbox106 = gtk.HBox(gtk.FALSE, 5)
+!         self.hbox106.set_size_request(114, -1)
+          self.hbox106.show()
+          self.hbox106.set_spacing(5)
+  
+***************
+*** 172,177 ****
+--- 169,175 ----
+          self.label173 = gtk.Label(_("-"))
+          self.label173.set_size_request(0, -1)
+          self.label173.set_padding(0, 0)
++         self.label173.set_line_wrap(gtk.FALSE)
+          self.label173.show()
+          self.hbox106.pack_start(self.label173, gtk.FALSE, gtk.FALSE, 0)
+  
+***************
+*** 182,188 ****
+          self.LastPort.show()
+          self.hbox106.pack_start(self.LastPort, gtk.FALSE, gtk.FALSE, 0)
+  
+!         self.vbox76.pack_start(self.hbox106, gtk.TRUE, gtk.TRUE, 0)
+  
+          self.vbox71.pack_start(self.vbox76, gtk.FALSE, gtk.FALSE, 0)
+  
+--- 180,206 ----
+          self.LastPort.show()
+          self.hbox106.pack_start(self.LastPort, gtk.FALSE, gtk.FALSE, 0)
+  
+!         self.vbox76.pack_start(self.hbox106, gtk.TRUE, gtk.TRUE, 3)
+! 
+!         self.label260 = gtk.Label(_("Use the above ports to configure your router or firewall."))
+!         self.label260.set_alignment(0, 0.5)
+!         self.label260.set_padding(0, 11)
+!         self.label260.set_line_wrap(gtk.FALSE)
+!         self.label260.show()
+!         self.vbox76.pack_start(self.label260, gtk.FALSE, gtk.FALSE, 0)
+! 
+!         self.DirectConnection = gtk.CheckButton()
+!         self.DirectConnection.set_active(gtk.FALSE)
+!         self.DirectConnection.set_label(_("I can receive direct connections"))
+!         self.DirectConnection.show()
+!         self.vbox76.pack_start(self.DirectConnection, gtk.FALSE, gtk.FALSE, 0)
+! 
+!         self.label271 = gtk.Label(_("(only use if the above ports are remotely accessable)"))
+!         self.label271.set_alignment(0, 0.5)
+!         self.label271.set_padding(0, 0)
+!         self.label271.set_line_wrap(gtk.FALSE)
+!         self.label271.show()
+!         self.vbox76.pack_start(self.label271, gtk.FALSE, gtk.FALSE, 0)
+  
+          self.vbox71.pack_start(self.vbox76, gtk.FALSE, gtk.FALSE, 0)
+  
+***************
+*** 190,195 ****
+--- 208,214 ----
+  
+          self.label165 = gtk.Label(_("Server"))
+          self.label165.set_padding(0, 0)
++         self.label165.set_line_wrap(gtk.FALSE)
+          self.label165.show()
+          self.Main.set_label_widget(self.label165)
+  
+***************
+*** 209,215 ****
+               self.accel_group = accel_group
+          if create:
+              self.SharesFrame = gtk.Window(gtk.WINDOW_TOPLEVEL)
+!             self.SharesFrame.set_title(_("window3"))
+              self.SharesFrame.set_position(gtk.WIN_POS_NONE)
+              self.SharesFrame.add_accel_group(self.accel_group)
+              self.SharesFrame.show()
+--- 228,234 ----
+               self.accel_group = accel_group
+          if create:
+              self.SharesFrame = gtk.Window(gtk.WINDOW_TOPLEVEL)
+!             self.SharesFrame.set_title(_("Shares"))
+              self.SharesFrame.set_position(gtk.WIN_POS_NONE)
+              self.SharesFrame.add_accel_group(self.accel_group)
+              self.SharesFrame.show()
+***************
+*** 230,235 ****
+--- 249,255 ----
+          self.label176 = gtk.Label(_("Incomplete file directory:"))
+          self.label176.set_alignment(0, 0.5)
+          self.label176.set_padding(0, 0)
++         self.label176.set_line_wrap(gtk.FALSE)
+          self.label176.show()
+          self.vbox78.pack_start(self.label176, gtk.FALSE, gtk.FALSE, 0)
+  
+***************
+*** 263,268 ****
+--- 283,289 ----
+  
+          self.label231 = gtk.Label(_("Choose..."))
+          self.label231.set_padding(0, 0)
++         self.label231.set_line_wrap(gtk.FALSE)
+          self.label231.show()
+          self.hbox152.pack_start(self.label231, gtk.FALSE, gtk.FALSE, 0)
+  
+***************
+*** 283,288 ****
+--- 304,310 ----
+          self.label178 = gtk.Label(_("Download directory:"))
+          self.label178.set_alignment(0, 0.5)
+          self.label178.set_padding(0, 0)
++         self.label178.set_line_wrap(gtk.FALSE)
+          self.label178.show()
+          self.vbox79.pack_start(self.label178, gtk.FALSE, gtk.FALSE, 0)
+  
+***************
+*** 316,321 ****
+--- 338,344 ----
+  
+          self.label232 = gtk.Label(_("Choose..."))
+          self.label232.set_padding(0, 0)
++         self.label232.set_line_wrap(gtk.FALSE)
+          self.label232.show()
+          self.hbox153.pack_start(self.label232, gtk.FALSE, gtk.FALSE, 0)
+  
+***************
+*** 376,381 ****
+--- 399,405 ----
+  
+          self.label233 = gtk.Label(_("Add..."))
+          self.label233.set_padding(0, 0)
++         self.label233.set_line_wrap(gtk.FALSE)
+          self.label233.show()
+          self.hbox154.pack_start(self.label233, gtk.FALSE, gtk.FALSE, 0)
+  
+***************
+*** 404,409 ****
+--- 428,434 ----
+  
+          self.label234 = gtk.Label(_("Remove"))
+          self.label234.set_padding(0, 0)
++         self.label234.set_line_wrap(gtk.FALSE)
+          self.label234.show()
+          self.hbox155.pack_start(self.label234, gtk.FALSE, gtk.FALSE, 0)
+  
+***************
+*** 427,432 ****
+--- 452,458 ----
+  
+          self.label175 = gtk.Label(_("Shares"))
+          self.label175.set_padding(0, 0)
++         self.label175.set_line_wrap(gtk.FALSE)
+          self.label175.show()
+          self.Main.set_label_widget(self.label175)
+  
+***************
+*** 461,467 ****
+               self.accel_group = accel_group
+          if create:
+              self.TransfersFrame = gtk.Window(gtk.WINDOW_TOPLEVEL)
+!             self.TransfersFrame.set_title(_("window4"))
+              self.TransfersFrame.set_position(gtk.WIN_POS_NONE)
+              self.TransfersFrame.add_accel_group(self.accel_group)
+              self.TransfersFrame.show()
+--- 487,493 ----
+               self.accel_group = accel_group
+          if create:
+              self.TransfersFrame = gtk.Window(gtk.WINDOW_TOPLEVEL)
+!             self.TransfersFrame.set_title(_("Transfers"))
+              self.TransfersFrame.set_position(gtk.WIN_POS_NONE)
+              self.TransfersFrame.add_accel_group(self.accel_group)
+              self.TransfersFrame.show()
+***************
+*** 479,496 ****
+          self.vbox82.show()
+          self.vbox82.set_spacing(0)
+  
+-         self.label184 = gtk.Label(_("Locally queue uploads if:"))
+-         self.label184.set_alignment(0, 0.5)
+-         self.label184.set_padding(0, 0)
+-         self.label184.show()
+-         self.vbox82.pack_start(self.label184, gtk.FALSE, gtk.FALSE, 0)
+- 
+          self.hbox117 = gtk.HBox(gtk.FALSE, 5)
+          self.hbox117.show()
+          self.hbox117.set_spacing(5)
+  
+!         self.label185 = gtk.Label(_("Upload speed exceeds "))
+          self.label185.set_padding(0, 0)
+          self.label185.show()
+          self.hbox117.pack_start(self.label185, gtk.FALSE, gtk.FALSE, 0)
+  
+--- 505,517 ----
+          self.vbox82.show()
+          self.vbox82.set_spacing(0)
+  
+          self.hbox117 = gtk.HBox(gtk.FALSE, 5)
+          self.hbox117.show()
+          self.hbox117.set_spacing(5)
+  
+!         self.label185 = gtk.Label(_("If Uploads are sent at"))
+          self.label185.set_padding(0, 0)
++         self.label185.set_line_wrap(gtk.FALSE)
+          self.label185.show()
+          self.hbox117.pack_start(self.label185, gtk.FALSE, gtk.FALSE, 0)
+  
+***************
+*** 501,520 ****
+          self.QueueBandwidth.show()
+          self.hbox117.pack_start(self.QueueBandwidth, gtk.FALSE, gtk.FALSE, 0)
+  
+!         self.label186 = gtk.Label(_("KBytes/sec"))
+          self.label186.set_padding(0, 0)
+          self.label186.show()
+          self.hbox117.pack_start(self.label186, gtk.FALSE, gtk.FALSE, 0)
+  
+          self.vbox82.pack_start(self.hbox117, gtk.FALSE, gtk.FALSE, 0)
+  
+          self.hbox118 = gtk.HBox(gtk.FALSE, 5)
+          self.hbox118.show()
+          self.hbox118.set_spacing(5)
+  
+          self.QueueUseSlots = gtk.CheckButton()
+          self.QueueUseSlots.set_active(gtk.FALSE)
+!         self.QueueUseSlots.set_label(_("Number of uploads exceeds"))
+          self.QueueUseSlots.show()
+          self.QueueUseSlots.connect("toggled", self.OnQueueUseSlotsToggled)
+          self.hbox118.pack_start(self.QueueUseSlots, gtk.FALSE, gtk.FALSE, 0)
+--- 522,550 ----
+          self.QueueBandwidth.show()
+          self.hbox117.pack_start(self.QueueBandwidth, gtk.FALSE, gtk.FALSE, 0)
+  
+!         self.label186 = gtk.Label(_("KBytes/sec then"))
+          self.label186.set_padding(0, 0)
++         self.label186.set_line_wrap(gtk.FALSE)
+          self.label186.show()
+          self.hbox117.pack_start(self.label186, gtk.FALSE, gtk.FALSE, 0)
+  
+          self.vbox82.pack_start(self.hbox117, gtk.FALSE, gtk.FALSE, 0)
+  
++         self.label261 = gtk.Label(_("other uploads will be queued."))
++         self.label261.set_alignment(0, 0)
++         self.label261.set_size_request(-1, 24)
++         self.label261.set_padding(0, 0)
++         self.label261.set_line_wrap(gtk.FALSE)
++         self.label261.show()
++         self.vbox82.pack_start(self.label261, gtk.FALSE, gtk.FALSE, 0)
++ 
+          self.hbox118 = gtk.HBox(gtk.FALSE, 5)
+          self.hbox118.show()
+          self.hbox118.set_spacing(5)
+  
+          self.QueueUseSlots = gtk.CheckButton()
+          self.QueueUseSlots.set_active(gtk.FALSE)
+!         self.QueueUseSlots.set_label(_("Limit number of uploads to"))
+          self.QueueUseSlots.show()
+          self.QueueUseSlots.connect("toggled", self.OnQueueUseSlotsToggled)
+          self.hbox118.pack_start(self.QueueUseSlots, gtk.FALSE, gtk.FALSE, 0)
+***************
+*** 528,533 ****
+--- 558,564 ----
+  
+          self.label254 = gtk.Label(_("(NOT RECOMMENDED)"))
+          self.label254.set_padding(0, 0)
++         self.label254.set_line_wrap(gtk.FALSE)
+          self.label254.show()
+          self.hbox118.pack_start(self.label254, gtk.FALSE, gtk.FALSE, 0)
+  
+***************
+*** 549,554 ****
+--- 580,586 ----
+  
+          self.label188 = gtk.Label(_("KBytes/sec"))
+          self.label188.set_padding(0, 0)
++         self.label188.set_line_wrap(gtk.FALSE)
+          self.label188.show()
+          self.table1.attach(self.label188, 2, 3, 0, 1, 0, 0, 0, 0)
+  
+***************
+*** 583,591 ****
+          self.hbox119.show()
+          self.hbox119.set_spacing(5)
+  
+!         self.label189 = gtk.Label(_("A user may queue a maximum of"))
+          self.label189.set_alignment(0, 0.5)
+          self.label189.set_padding(0, 0)
+          self.label189.show()
+          self.hbox119.pack_start(self.label189, gtk.FALSE, gtk.FALSE, 0)
+  
+--- 615,624 ----
+          self.hbox119.show()
+          self.hbox119.set_spacing(5)
+  
+!         self.label189 = gtk.Label(_("Each user may queue a maximum of"))
+          self.label189.set_alignment(0, 0.5)
+          self.label189.set_padding(0, 0)
++         self.label189.set_line_wrap(gtk.FALSE)
+          self.label189.show()
+          self.hbox119.pack_start(self.label189, gtk.FALSE, gtk.FALSE, 0)
+  
+***************
+*** 598,603 ****
+--- 631,637 ----
+  
+          self.label190 = gtk.Label(_("Megabytes"))
+          self.label190.set_padding(0, 0)
++         self.label190.set_line_wrap(gtk.FALSE)
+          self.label190.show()
+          self.hbox119.pack_start(self.label190, gtk.FALSE, gtk.FALSE, 0)
+  
+***************
+*** 605,611 ****
+  
+          self.FriendsNoLimits = gtk.CheckButton()
+          self.FriendsNoLimits.set_active(gtk.FALSE)
+!         self.FriendsNoLimits.set_label(_("Queue limit does not apply to friends"))
+          self.FriendsNoLimits.show()
+          self.vbox83.pack_start(self.FriendsNoLimits, gtk.FALSE, gtk.FALSE, 0)
+  
+--- 639,645 ----
+  
+          self.FriendsNoLimits = gtk.CheckButton()
+          self.FriendsNoLimits.set_active(gtk.FALSE)
+!         self.FriendsNoLimits.set_label(_("Queue size limit does not apply to friends"))
+          self.FriendsNoLimits.show()
+          self.vbox83.pack_start(self.FriendsNoLimits, gtk.FALSE, gtk.FALSE, 0)
+  
+***************
+*** 634,639 ****
+--- 668,674 ----
+  
+          self.label183 = gtk.Label(_("Transfers"))
+          self.label183.set_padding(0, 0)
++         self.label183.set_line_wrap(gtk.FALSE)
+          self.label183.show()
+          self.Main.set_label_widget(self.label183)
+  
+***************
+*** 662,668 ****
+               self.accel_group = accel_group
+          if create:
+              self.UserinfoFrame = gtk.Window(gtk.WINDOW_TOPLEVEL)
+!             self.UserinfoFrame.set_title(_("window5"))
+              self.UserinfoFrame.set_position(gtk.WIN_POS_NONE)
+              self.UserinfoFrame.add_accel_group(self.accel_group)
+              self.UserinfoFrame.show()
+--- 697,703 ----
+               self.accel_group = accel_group
+          if create:
+              self.UserinfoFrame = gtk.Window(gtk.WINDOW_TOPLEVEL)
+!             self.UserinfoFrame.set_title(_("Userinfo"))
+              self.UserinfoFrame.set_position(gtk.WIN_POS_NONE)
+              self.UserinfoFrame.add_accel_group(self.accel_group)
+              self.UserinfoFrame.show()
+***************
+*** 683,688 ****
+--- 718,724 ----
+          self.label193 = gtk.Label(_("Self description:"))
+          self.label193.set_alignment(0, 0.5)
+          self.label193.set_padding(0, 0)
++         self.label193.set_line_wrap(gtk.FALSE)
+          self.label193.show()
+          self.vbox85.pack_start(self.label193, gtk.FALSE, gtk.FALSE, 0)
+  
+***************
+*** 709,714 ****
+--- 745,757 ----
+  
+          self.vbox84.pack_start(self.vbox85, gtk.TRUE, gtk.TRUE, 0)
+  
++         self.label265 = gtk.Label(_("Image:"))
++         self.label265.set_alignment(0, 0.5)
++         self.label265.set_padding(0, 0)
++         self.label265.set_line_wrap(gtk.FALSE)
++         self.label265.show()
++         self.vbox84.pack_start(self.label265, gtk.FALSE, gtk.FALSE, 0)
++ 
+          self.hbox122 = gtk.HBox(gtk.FALSE, 5)
+          self.hbox122.show()
+          self.hbox122.set_spacing(5)
+***************
+*** 739,744 ****
+--- 782,788 ----
+  
+          self.label230 = gtk.Label(_("Choose..."))
+          self.label230.set_padding(0, 0)
++         self.label230.set_line_wrap(gtk.FALSE)
+          self.label230.show()
+          self.hbox151.pack_start(self.label230, gtk.FALSE, gtk.FALSE, 0)
+  
+***************
+*** 754,759 ****
+--- 798,804 ----
+  
+          self.label192 = gtk.Label(_("Personal settings"))
+          self.label192.set_padding(0, 0)
++         self.label192.set_line_wrap(gtk.FALSE)
+          self.label192.show()
+          self.Main.set_label_widget(self.label192)
+  
+***************
+*** 776,782 ****
+               self.accel_group = accel_group
+          if create:
+              self.BloatFrame = gtk.Window(gtk.WINDOW_TOPLEVEL)
+!             self.BloatFrame.set_title(_("window6"))
+              self.BloatFrame.set_position(gtk.WIN_POS_NONE)
+              self.BloatFrame.add_accel_group(self.accel_group)
+              self.BloatFrame.show()
+--- 821,827 ----
+               self.accel_group = accel_group
+          if create:
+              self.BloatFrame = gtk.Window(gtk.WINDOW_TOPLEVEL)
+!             self.BloatFrame.set_title(_("Bloat"))
+              self.BloatFrame.set_position(gtk.WIN_POS_NONE)
+              self.BloatFrame.add_accel_group(self.accel_group)
+              self.BloatFrame.show()
+***************
+*** 820,825 ****
+--- 865,871 ----
+  
+          self.label197 = gtk.Label(_("Remote text"))
+          self.label197.set_padding(0, 0)
++         self.label197.set_line_wrap(gtk.FALSE)
+          self.label197.show()
+          self.hbox124.pack_start(self.label197, gtk.FALSE, gtk.FALSE, 0)
+  
+***************
+*** 853,858 ****
+--- 899,905 ----
+  
+          self.label198 = gtk.Label(_("Default"))
+          self.label198.set_padding(0, 0)
++         self.label198.set_line_wrap(gtk.FALSE)
+          self.label198.show()
+          self.hbox125.pack_start(self.label198, gtk.FALSE, gtk.FALSE, 0)
+  
+***************
+*** 881,886 ****
+--- 928,934 ----
+  
+          self.label205 = gtk.Label(_("Local text"))
+          self.label205.set_padding(0, 0)
++         self.label205.set_line_wrap(gtk.FALSE)
+          self.label205.show()
+          self.hbox132.pack_start(self.label205, gtk.FALSE, gtk.FALSE, 0)
+  
+***************
+*** 909,914 ****
+--- 957,963 ----
+  
+          self.label206 = gtk.Label(_("/me text"))
+          self.label206.set_padding(0, 0)
++         self.label206.set_line_wrap(gtk.FALSE)
+          self.label206.show()
+          self.hbox133.pack_start(self.label206, gtk.FALSE, gtk.FALSE, 0)
+  
+***************
+*** 937,942 ****
+--- 986,992 ----
+  
+          self.label207 = gtk.Label(_("Highlight text"))
+          self.label207.set_padding(0, 0)
++         self.label207.set_line_wrap(gtk.FALSE)
+          self.label207.show()
+          self.hbox134.pack_start(self.label207, gtk.FALSE, gtk.FALSE, 0)
+  
+***************
+*** 964,969 ****
+--- 1014,1020 ----
+  
+          self.label202 = gtk.Label(_("Default"))
+          self.label202.set_padding(0, 0)
++         self.label202.set_line_wrap(gtk.FALSE)
+          self.label202.show()
+          self.hbox129.pack_start(self.label202, gtk.FALSE, gtk.FALSE, 0)
+  
+***************
+*** 991,996 ****
+--- 1042,1048 ----
+  
+          self.label203 = gtk.Label(_("Default"))
+          self.label203.set_padding(0, 0)
++         self.label203.set_line_wrap(gtk.FALSE)
+          self.label203.show()
+          self.hbox130.pack_start(self.label203, gtk.FALSE, gtk.FALSE, 0)
+  
+***************
+*** 1018,1023 ****
+--- 1070,1076 ----
+  
+          self.label204 = gtk.Label(_("Default"))
+          self.label204.set_padding(0, 0)
++         self.label204.set_line_wrap(gtk.FALSE)
+          self.label204.show()
+          self.hbox131.pack_start(self.label204, gtk.FALSE, gtk.FALSE, 0)
+  
+***************
+*** 1048,1053 ****
+--- 1101,1107 ----
+          self.label196 = gtk.Label(_("Chat colours"))
+          self.label196.set_alignment(0, 0.5)
+          self.label196.set_padding(0, 5)
++         self.label196.set_line_wrap(gtk.FALSE)
+          self.label196.show()
+          self.table2.attach(self.label196, 0, 3, 0, 1, gtk.FILL, 0, 0, 0)
+  
+***************
+*** 1070,1075 ****
+--- 1124,1130 ----
+  
+          self.label209 = gtk.Label(_("Immediate DL"))
+          self.label209.set_padding(0, 0)
++         self.label209.set_line_wrap(gtk.FALSE)
+          self.label209.show()
+          self.hbox135.pack_start(self.label209, gtk.FALSE, gtk.FALSE, 0)
+  
+***************
+*** 1098,1103 ****
+--- 1153,1159 ----
+  
+          self.label210 = gtk.Label(_("With queue"))
+          self.label210.set_padding(0, 0)
++         self.label210.set_line_wrap(gtk.FALSE)
+          self.label210.show()
+          self.hbox136.pack_start(self.label210, gtk.FALSE, gtk.FALSE, 0)
+  
+***************
+*** 1137,1142 ****
+--- 1193,1199 ----
+  
+          self.label211 = gtk.Label(_("Default"))
+          self.label211.set_padding(0, 0)
++         self.label211.set_line_wrap(gtk.FALSE)
+          self.label211.show()
+          self.hbox137.pack_start(self.label211, gtk.FALSE, gtk.FALSE, 0)
+  
+***************
+*** 1164,1169 ****
+--- 1221,1227 ----
+  
+          self.label212 = gtk.Label(_("Default"))
+          self.label212.set_padding(0, 0)
++         self.label212.set_line_wrap(gtk.FALSE)
+          self.label212.show()
+          self.hbox138.pack_start(self.label212, gtk.FALSE, gtk.FALSE, 0)
+  
+***************
+*** 1176,1181 ****
+--- 1234,1240 ----
+          self.label208 = gtk.Label(_("Search colours"))
+          self.label208.set_alignment(0, 0.5)
+          self.label208.set_padding(0, 5)
++         self.label208.set_line_wrap(gtk.FALSE)
+          self.label208.show()
+          self.table2.attach(self.label208, 0, 3, 5, 6, gtk.FILL, 0, 0, 0)
+  
+***************
+*** 1188,1193 ****
+--- 1247,1253 ----
+          self.label213 = gtk.Label(_("Decimal seperator:"))
+          self.label213.set_alignment(0, 0.5)
+          self.label213.set_padding(0, 0)
++         self.label213.set_line_wrap(gtk.FALSE)
+          self.label213.show()
+          self.hbox139.pack_start(self.label213, gtk.FALSE, gtk.FALSE, 0)
+  
+***************
+*** 1211,1216 ****
+--- 1271,1277 ----
+  
+          self.label195 = gtk.Label(_("Extra stuff for your comfort"))
+          self.label195.set_padding(0, 0)
++         self.label195.set_line_wrap(gtk.FALSE)
+          self.label195.show()
+          self.Main.set_label_widget(self.label195)
+  
+***************
+*** 1230,1236 ****
+               self.accel_group = accel_group
+          if create:
+              self.LogFrame = gtk.Window(gtk.WINDOW_TOPLEVEL)
+!             self.LogFrame.set_title(_("window7"))
+              self.LogFrame.set_position(gtk.WIN_POS_NONE)
+              self.LogFrame.add_accel_group(self.accel_group)
+              self.LogFrame.show()
+--- 1291,1297 ----
+               self.accel_group = accel_group
+          if create:
+              self.LogFrame = gtk.Window(gtk.WINDOW_TOPLEVEL)
+!             self.LogFrame.set_title(_("Log"))
+              self.LogFrame.set_position(gtk.WIN_POS_NONE)
+              self.LogFrame.add_accel_group(self.accel_group)
+              self.LogFrame.show()
+***************
+*** 1269,1274 ****
+--- 1330,1336 ----
+          self.label217 = gtk.Label(_("Logs directory:"))
+          self.label217.set_alignment(0, 0.5)
+          self.label217.set_padding(0, 0)
++         self.label217.set_line_wrap(gtk.FALSE)
+          self.label217.show()
+          self.vbox90.pack_start(self.label217, gtk.FALSE, gtk.FALSE, 0)
+  
+***************
+*** 1301,1306 ****
+--- 1363,1369 ----
+  
+          self.label227 = gtk.Label(_("Choose..."))
+          self.label227.set_padding(0, 0)
++         self.label227.set_line_wrap(gtk.FALSE)
+          self.label227.show()
+          self.hbox148.pack_start(self.label227, gtk.FALSE, gtk.FALSE, 0)
+  
+***************
+*** 1318,1323 ****
+--- 1381,1387 ----
+  
+          self.label216 = gtk.Label(_("Logging"))
+          self.label216.set_padding(0, 0)
++         self.label216.set_line_wrap(gtk.FALSE)
+          self.label216.show()
+          self.Main.set_label_widget(self.label216)
+  
+***************
+*** 1340,1346 ****
+               self.accel_group = accel_group
+          if create:
+              self.BanFrame = gtk.Window(gtk.WINDOW_TOPLEVEL)
+!             self.BanFrame.set_title(_("window8"))
+              self.BanFrame.set_position(gtk.WIN_POS_NONE)
+              self.BanFrame.add_accel_group(self.accel_group)
+              self.BanFrame.show()
+--- 1404,1410 ----
+               self.accel_group = accel_group
+          if create:
+              self.BanFrame = gtk.Window(gtk.WINDOW_TOPLEVEL)
+!             self.BanFrame.set_title(_("Ban"))
+              self.BanFrame.set_position(gtk.WIN_POS_NONE)
+              self.BanFrame.add_accel_group(self.accel_group)
+              self.BanFrame.show()
+***************
+*** 1365,1370 ****
+--- 1429,1435 ----
+  
+          self.label219 = gtk.Label(_("Banned Users:"))
+          self.label219.set_padding(0, 0)
++         self.label219.set_line_wrap(gtk.FALSE)
+          self.label219.show()
+          self.vbox92.pack_start(self.label219, gtk.FALSE, gtk.FALSE, 0)
+  
+***************
+*** 1399,1404 ****
+--- 1464,1470 ----
+  
+          self.label238 = gtk.Label(_("Add..."))
+          self.label238.set_padding(0, 0)
++         self.label238.set_line_wrap(gtk.FALSE)
+          self.label238.show()
+          self.hbox156.pack_start(self.label238, gtk.FALSE, gtk.FALSE, 0)
+  
+***************
+*** 1427,1432 ****
+--- 1493,1499 ----
+  
+          self.label239 = gtk.Label(_("Remove"))
+          self.label239.set_padding(0, 0)
++         self.label239.set_line_wrap(gtk.FALSE)
+          self.label239.show()
+          self.hbox157.pack_start(self.label239, gtk.FALSE, gtk.FALSE, 0)
+  
+***************
+*** 1455,1460 ****
+--- 1522,1528 ----
+  
+          self.label240 = gtk.Label(_("Clear"))
+          self.label240.set_padding(0, 0)
++         self.label240.set_line_wrap(gtk.FALSE)
+          self.label240.show()
+          self.hbox158.pack_start(self.label240, gtk.FALSE, gtk.FALSE, 0)
+  
+***************
+*** 1473,1478 ****
+--- 1541,1547 ----
+  
+          self.label237 = gtk.Label(_("Ignored users:"))
+          self.label237.set_padding(0, 0)
++         self.label237.set_line_wrap(gtk.FALSE)
+          self.label237.show()
+          self.vbox97.pack_start(self.label237, gtk.FALSE, gtk.FALSE, 0)
+  
+***************
+*** 1507,1512 ****
+--- 1576,1582 ----
+  
+          self.label241 = gtk.Label(_("Add..."))
+          self.label241.set_padding(0, 0)
++         self.label241.set_line_wrap(gtk.FALSE)
+          self.label241.show()
+          self.hbox159.pack_start(self.label241, gtk.FALSE, gtk.FALSE, 0)
+  
+***************
+*** 1535,1540 ****
+--- 1605,1611 ----
+  
+          self.label242 = gtk.Label(_("Remove"))
+          self.label242.set_padding(0, 0)
++         self.label242.set_line_wrap(gtk.FALSE)
+          self.label242.show()
+          self.hbox160.pack_start(self.label242, gtk.FALSE, gtk.FALSE, 0)
+  
+***************
+*** 1563,1568 ****
+--- 1634,1640 ----
+  
+          self.label243 = gtk.Label(_("Clear"))
+          self.label243.set_padding(0, 0)
++         self.label243.set_line_wrap(gtk.FALSE)
+          self.label243.show()
+          self.hbox161.pack_start(self.label243, gtk.FALSE, gtk.FALSE, 0)
+  
+***************
+*** 1599,1604 ****
+--- 1671,1677 ----
+  
+          self.label218 = gtk.Label(_("Banning"))
+          self.label218.set_padding(0, 0)
++         self.label218.set_line_wrap(gtk.FALSE)
+          self.label218.show()
+          self.Main.set_label_widget(self.label218)
+  
+***************
+*** 1639,1645 ****
+               self.accel_group = accel_group
+          if create:
+              self.SearchFrame = gtk.Window(gtk.WINDOW_TOPLEVEL)
+!             self.SearchFrame.set_title(_("window9"))
+              self.SearchFrame.set_position(gtk.WIN_POS_NONE)
+              self.SearchFrame.add_accel_group(self.accel_group)
+              self.SearchFrame.show()
+--- 1712,1718 ----
+               self.accel_group = accel_group
+          if create:
+              self.SearchFrame = gtk.Window(gtk.WINDOW_TOPLEVEL)
+!             self.SearchFrame.set_title(_("Search"))
+              self.SearchFrame.set_position(gtk.WIN_POS_NONE)
+              self.SearchFrame.add_accel_group(self.accel_group)
+              self.SearchFrame.show()
+***************
+*** 1653,1664 ****
+          self.vbox93.set_spacing(10)
+          self.vbox93.set_border_width(5)
+  
+          self.hbox147 = gtk.HBox(gtk.FALSE, 5)
+          self.hbox147.show()
+          self.hbox147.set_spacing(5)
+  
+!         self.label225 = gtk.Label(_("Return a max of"))
+          self.label225.set_padding(0, 0)
+          self.label225.show()
+          self.hbox147.pack_start(self.label225, gtk.FALSE, gtk.FALSE, 0)
+  
+--- 1726,1746 ----
+          self.vbox93.set_spacing(10)
+          self.vbox93.set_border_width(5)
+  
++         self.label262 = gtk.Label(_("Network Searches:"))
++         self.label262.set_alignment(0, 0)
++         self.label262.set_padding(0, 0)
++         self.label262.set_line_wrap(gtk.FALSE)
++         self.label262.show()
++         self.vbox93.pack_start(self.label262, gtk.FALSE, gtk.FALSE, 0)
++ 
+          self.hbox147 = gtk.HBox(gtk.FALSE, 5)
+          self.hbox147.show()
+          self.hbox147.set_spacing(5)
+  
+!         self.label225 = gtk.Label(_("Send out a max of"))
+!         self.label225.set_alignment(1, 0.5)
+          self.label225.set_padding(0, 0)
++         self.label225.set_line_wrap(gtk.FALSE)
+          self.label225.show()
+          self.hbox147.pack_start(self.label225, gtk.FALSE, gtk.FALSE, 0)
+  
+***************
+*** 1671,1681 ****
+--- 1753,1771 ----
+  
+          self.label226 = gtk.Label(_("results per search request"))
+          self.label226.set_padding(0, 0)
++         self.label226.set_line_wrap(gtk.FALSE)
+          self.label226.show()
+          self.hbox147.pack_start(self.label226, gtk.FALSE, gtk.FALSE, 0)
+  
+          self.vbox93.pack_start(self.hbox147, gtk.FALSE, gtk.FALSE, 0)
+  
++         self.label263 = gtk.Label(_("Your Searches:"))
++         self.label263.set_alignment(0, 0.5)
++         self.label263.set_padding(0, 0)
++         self.label263.set_line_wrap(gtk.FALSE)
++         self.label263.show()
++         self.vbox93.pack_start(self.label263, gtk.FALSE, gtk.FALSE, 0)
++ 
+          self.RegexpFilters = gtk.CheckButton()
+          self.RegexpFilters.set_active(gtk.FALSE)
+          self.RegexpFilters.set_label(_("Use regular expressions for filter in & out"))
+***************
+*** 1697,1720 ****
+--- 1787,1814 ----
+          self.label255 = gtk.Label(_("Filter in:"))
+          self.label255.set_alignment(0, 0.5)
+          self.label255.set_padding(0, 0)
++         self.label255.set_line_wrap(gtk.FALSE)
+          self.label255.show()
+          self.table4.attach(self.label255, 0, 1, 0, 1, gtk.FILL, 0, 0, 0)
+  
+          self.label256 = gtk.Label(_("Filter out:"))
+          self.label256.set_alignment(0, 0.5)
+          self.label256.set_padding(0, 0)
++         self.label256.set_line_wrap(gtk.FALSE)
+          self.label256.show()
+          self.table4.attach(self.label256, 0, 1, 1, 2, gtk.FILL, 0, 0, 0)
+  
+          self.label257 = gtk.Label(_("Size:"))
+          self.label257.set_alignment(0, 0.5)
+          self.label257.set_padding(0, 0)
++         self.label257.set_line_wrap(gtk.FALSE)
+          self.label257.show()
+          self.table4.attach(self.label257, 0, 1, 2, 3, gtk.FILL, 0, 0, 0)
+  
+          self.label258 = gtk.Label(_("Bitrate:"))
+          self.label258.set_alignment(0, 0.5)
+          self.label258.set_padding(0, 0)
++         self.label258.set_line_wrap(gtk.FALSE)
+          self.label258.show()
+          self.table4.attach(self.label258, 0, 1, 3, 4, gtk.FILL, 0, 0, 0)
+  
+***************
+*** 1763,1768 ****
+--- 1857,1863 ----
+          self.label259 = gtk.Label(_("Country:"))
+          self.label259.set_alignment(0, 0.5)
+          self.label259.set_padding(0, 0)
++         self.label259.set_line_wrap(gtk.FALSE)
+          self.label259.show()
+          self.table4.attach(self.label259, 0, 1, 4, 5, gtk.FILL, 0, 0, 0)
+  
+***************
+*** 1784,1789 ****
+--- 1879,1885 ----
+  
+          self.label224 = gtk.Label(_("Searches"))
+          self.label224.set_padding(0, 0)
++         self.label224.set_line_wrap(gtk.FALSE)
+          self.label224.show()
+          self.Main.set_label_widget(self.label224)
+  
+***************
+*** 1897,1903 ****
+               self.accel_group = accel_group
+          if create:
+              self.AwayFrame = gtk.Window(gtk.WINDOW_TOPLEVEL)
+!             self.AwayFrame.set_title(_("window1"))
+              self.AwayFrame.set_position(gtk.WIN_POS_NONE)
+              self.AwayFrame.add_accel_group(self.accel_group)
+              self.AwayFrame.show()
+--- 1993,1999 ----
+               self.accel_group = accel_group
+          if create:
+              self.AwayFrame = gtk.Window(gtk.WINDOW_TOPLEVEL)
+!             self.AwayFrame.set_title(_("Away"))
+              self.AwayFrame.set_position(gtk.WIN_POS_NONE)
+              self.AwayFrame.add_accel_group(self.accel_group)
+              self.AwayFrame.show()
+***************
+*** 1918,1923 ****
+--- 2014,2020 ----
+          self.label170 = gtk.Label(_("Toggle away after "))
+          self.label170.set_alignment(0, 0.5)
+          self.label170.set_padding(0, 0)
++         self.label170.set_line_wrap(gtk.FALSE)
+          self.label170.show()
+          self.hbox105.pack_start(self.label170, gtk.FALSE, gtk.FALSE, 0)
+  
+***************
+*** 1930,1935 ****
+--- 2027,2033 ----
+  
+          self.label171 = gtk.Label(_(" minutes of inactivity"))
+          self.label171.set_padding(0, 0)
++         self.label171.set_line_wrap(gtk.FALSE)
+          self.label171.show()
+          self.hbox105.pack_start(self.label171, gtk.FALSE, gtk.FALSE, 0)
+  
+***************
+*** 1942,1947 ****
+--- 2040,2046 ----
+          self.label174 = gtk.Label(_("Auto-reply when away:  "))
+          self.label174.set_alignment(0, 0.5)
+          self.label174.set_padding(0, 0)
++         self.label174.set_line_wrap(gtk.FALSE)
+          self.label174.show()
+          self.hbox107.pack_start(self.label174, gtk.FALSE, gtk.FALSE, 0)
+  
+***************
+*** 1958,1963 ****
+--- 2057,2063 ----
+  
+          self.label235 = gtk.Label(_("Away mode"))
+          self.label235.set_padding(0, 0)
++         self.label235.set_line_wrap(gtk.FALSE)
+          self.label235.show()
+          self.Main.set_label_widget(self.label235)
+  
+***************
+*** 1977,1983 ****
+               self.accel_group = accel_group
+          if create:
+              self.EventsFrame = gtk.Window(gtk.WINDOW_TOPLEVEL)
+!             self.EventsFrame.set_title(_("window2"))
+              self.EventsFrame.set_position(gtk.WIN_POS_NONE)
+              self.EventsFrame.add_accel_group(self.accel_group)
+              self.EventsFrame.show()
+--- 2077,2083 ----
+               self.accel_group = accel_group
+          if create:
+              self.EventsFrame = gtk.Window(gtk.WINDOW_TOPLEVEL)
+!             self.EventsFrame.set_title(_("Events"))
+              self.EventsFrame.set_position(gtk.WIN_POS_NONE)
+              self.EventsFrame.add_accel_group(self.accel_group)
+              self.EventsFrame.show()
+***************
+*** 1998,2003 ****
+--- 2098,2104 ----
+          self.label214 = gtk.Label(_("Run command after download finishes ($ for filename):"))
+          self.label214.set_alignment(0, 0.5)
+          self.label214.set_padding(0, 0)
++         self.label214.set_line_wrap(gtk.FALSE)
+          self.label214.show()
+          self.vbox87.pack_start(self.label214, gtk.FALSE, gtk.FALSE, 0)
+  
+***************
+*** 2018,2023 ****
+--- 2119,2125 ----
+          self.label215.set_alignment(0, 0.5)
+          self.label215.set_size_request(48, -1)
+          self.label215.set_padding(0, 0)
++         self.label215.set_line_wrap(gtk.FALSE)
+          self.label215.show()
+          self.vbox88.pack_start(self.label215, gtk.FALSE, gtk.FALSE, 0)
+  
+***************
+*** 2034,2039 ****
+--- 2136,2142 ----
+  
+          self.label236 = gtk.Label(_("Events"))
+          self.label236.set_padding(0, 0)
++         self.label236.set_line_wrap(gtk.FALSE)
+          self.label236.show()
+          self.Main.set_label_widget(self.label236)
+  
+***************
+*** 2053,2059 ****
+               self.accel_group = accel_group
+          if create:
+              self.GeoBlockFrame = gtk.Window(gtk.WINDOW_TOPLEVEL)
+!             self.GeoBlockFrame.set_title(_("window1"))
+              self.GeoBlockFrame.set_position(gtk.WIN_POS_NONE)
+              self.GeoBlockFrame.add_accel_group(self.accel_group)
+              self.GeoBlockFrame.show()
+--- 2156,2162 ----
+               self.accel_group = accel_group
+          if create:
+              self.GeoBlockFrame = gtk.Window(gtk.WINDOW_TOPLEVEL)
+!             self.GeoBlockFrame.set_title(_("GeoBlock"))
+              self.GeoBlockFrame.set_position(gtk.WIN_POS_NONE)
+              self.GeoBlockFrame.add_accel_group(self.accel_group)
+              self.GeoBlockFrame.show()
+***************
+*** 2083,2088 ****
+--- 2186,2192 ----
+          self.label245 = gtk.Label(_("Country codes to block (comma separated):"))
+          self.label245.set_alignment(0, 0.5)
+          self.label245.set_padding(0, 0)
++         self.label245.set_line_wrap(gtk.FALSE)
+          self.label245.show()
+          self.vbox98.pack_start(self.label245, gtk.FALSE, gtk.FALSE, 0)
+  
+***************
+*** 2096,2101 ****
+--- 2200,2206 ----
+  
+          self.label244 = gtk.Label(_("Geographical Blocking"))
+          self.label244.set_padding(0, 0)
++         self.label244.set_line_wrap(gtk.FALSE)
+          self.label244.show()
+          self.Main.set_label_widget(self.label244)
+  
+***************
+*** 2118,2124 ****
+               self.accel_group = accel_group
+          if create:
+              self.UrlCatchFrame = gtk.Window(gtk.WINDOW_TOPLEVEL)
+!             self.UrlCatchFrame.set_title(_("window1"))
+              self.UrlCatchFrame.set_position(gtk.WIN_POS_NONE)
+              self.UrlCatchFrame.add_accel_group(self.accel_group)
+              self.UrlCatchFrame.show()
+--- 2223,2229 ----
+               self.accel_group = accel_group
+          if create:
+              self.UrlCatchFrame = gtk.Window(gtk.WINDOW_TOPLEVEL)
+!             self.UrlCatchFrame.set_title(_("UrlCatch"))
+              self.UrlCatchFrame.set_position(gtk.WIN_POS_NONE)
+              self.UrlCatchFrame.add_accel_group(self.accel_group)
+              self.UrlCatchFrame.show()
+***************
+*** 2147,2152 ****
+--- 2252,2258 ----
+  
+          self.label251 = gtk.Label(_("Protocols handlers:"))
+          self.label251.set_padding(0, 0)
++         self.label251.set_line_wrap(gtk.FALSE)
+          self.label251.show()
+          self.vbox99.pack_start(self.label251, gtk.FALSE, gtk.FALSE, 0)
+  
+***************
+*** 2170,2175 ****
+--- 2276,2282 ----
+          self.label252 = gtk.Label(_("Protocol:"))
+          self.label252.set_alignment(0, 0.5)
+          self.label252.set_padding(0, 0)
++         self.label252.set_line_wrap(gtk.FALSE)
+          self.label252.show()
+          self.table3.attach(self.label252, 0, 1, 0, 1, gtk.FILL, 0, 0, 0)
+  
+***************
+*** 2182,2187 ****
+--- 2289,2295 ----
+          self.label253 = gtk.Label(_("Handler:"))
+          self.label253.set_alignment(0, 0.5)
+          self.label253.set_padding(0, 0)
++         self.label253.set_line_wrap(gtk.FALSE)
+          self.label253.show()
+          self.table3.attach(self.label253, 0, 1, 1, 2, gtk.FILL, 0, 0, 0)
+  
+***************
+*** 2211,2216 ****
+--- 2319,2325 ----
+  
+          self.label246 = gtk.Label(_("URL Catching:"))
+          self.label246.set_padding(0, 0)
++         self.label246.set_line_wrap(gtk.FALSE)
+          self.label246.show()
+          self.Main.set_label_widget(self.label246)
+  
+***************
+*** 2231,2233 ****
+--- 2340,2576 ----
+          w = gtk.Label(_("(custom widget: %s)") % id)
+          return w
+  
++ class ConnectionFrame:
++     def __init__(self, create = gtk.TRUE, accel_group = None):
++         if accel_group is None:
++              self.accel_group = gtk.AccelGroup()
++         else:
++              self.accel_group = accel_group
++         if create:
++             self.ConnectionFrame = gtk.Window(gtk.WINDOW_TOPLEVEL)
++             self.ConnectionFrame.set_title(_("Connection"))
++             self.ConnectionFrame.set_position(gtk.WIN_POS_NONE)
++             self.ConnectionFrame.add_accel_group(self.accel_group)
++             self.ConnectionFrame.show()
++ 
++         self.Main = gtk.Frame()
++         self.Main.show()
++         self.Main.set_shadow_type(gtk.SHADOW_ETCHED_IN)
++ 
++         self.alignment68 = gtk.Alignment(0.5, 0.5, 1, 1)
++         self.alignment68.show()
++ 
++         self.vbox100 = gtk.VBox(gtk.FALSE, 6)
++         self.vbox100.show()
++         self.vbox100.set_spacing(6)
++         self.vbox100.set_border_width(2)
++ 
++         self.label267 = gtk.Label(_("Choose Server to configure the server you wish to connect to, your username, password and connection ports."))
++         self.label267.set_alignment(0, 0)
++         self.label267.set_padding(8, 0)
++         self.label267.set_line_wrap(gtk.TRUE)
++         self.label267.show()
++         self.vbox100.pack_start(self.label267, gtk.FALSE, gtk.FALSE, 0)
++ 
++         self.label268 = gtk.Label(_("Choose Shares to configure your Download and Shared directories."))
++         self.label268.set_alignment(0, 0)
++         self.label268.set_padding(8, 0)
++         self.label268.set_line_wrap(gtk.TRUE)
++         self.label268.show()
++         self.vbox100.pack_start(self.label268, gtk.FALSE, gtk.FALSE, 0)
++ 
++         self.label269 = gtk.Label(_("Choose Transfers to configure how uploads are queued and what privileges are given to your friends."))
++         self.label269.set_alignment(0, 0)
++         self.label269.set_padding(8, 0)
++         self.label269.set_line_wrap(gtk.TRUE)
++         self.label269.show()
++         self.vbox100.pack_start(self.label269, gtk.FALSE, gtk.FALSE, 0)
++ 
++         self.label284 = gtk.Label(_("Choose Geo Block (if available) to control from which countries users are allowed access to your shares."))
++         self.label284.set_alignment(0, 0)
++         self.label284.set_padding(8, 0)
++         self.label284.set_line_wrap(gtk.TRUE)
++         self.label284.show()
++         self.vbox100.pack_start(self.label284, gtk.FALSE, gtk.FALSE, 0)
++ 
++         self.label285 = gtk.Label(_("If you wish to use Geo Block, install GeoIP and it's Python Bindings from your distro's packaging tool or from:"))
++         self.label285.set_alignment(0, 0)
++         self.label285.set_padding(8, 0)
++         self.label285.set_line_wrap(gtk.TRUE)
++         self.label285.show()
++         self.vbox100.pack_start(self.label285, gtk.FALSE, gtk.FALSE, 0)
++ 
++         self.label286 = gtk.Label(_("http://www.maxmind.com/app/c"))
++         self.label286.set_alignment(0, 0)
++         self.label286.set_padding(8, 0)
++         self.label286.set_line_wrap(gtk.FALSE)
++         self.label286.show()
++         self.vbox100.pack_start(self.label286, gtk.FALSE, gtk.FALSE, 0)
++ 
++         self.label287 = gtk.Label(_("http://www.maxmind.com/app/python"))
++         self.label287.set_alignment(0, 0)
++         self.label287.set_padding(8, 0)
++         self.label287.set_line_wrap(gtk.FALSE)
++         self.label287.show()
++         self.vbox100.pack_start(self.label287, gtk.FALSE, gtk.FALSE, 0)
++ 
++         self.alignment68.add(self.vbox100)
++ 
++         self.Main.add(self.alignment68)
++ 
++         self.label266 = gtk.Label(_("Connection Settings"))
++         self.label266.set_padding(0, 0)
++         self.label266.set_line_wrap(gtk.FALSE)
++         self.label266.show()
++         self.Main.set_label_widget(self.label266)
++ 
++ 
++         if create:
++             self.ConnectionFrame.add(self.Main)
++ 
++     def get_custom_widget(self, id, string1, string2, int1, int2):
++         w = gtk.Label(_("(custom widget: %s)") % id)
++         return w
++ 
++ class UIFrame:
++     def __init__(self, create = gtk.TRUE, accel_group = None):
++         if accel_group is None:
++              self.accel_group = gtk.AccelGroup()
++         else:
++              self.accel_group = accel_group
++         if create:
++             self.UIFrame = gtk.Window(gtk.WINDOW_TOPLEVEL)
++             self.UIFrame.set_title(_("UI"))
++             self.UIFrame.set_position(gtk.WIN_POS_NONE)
++             self.UIFrame.add_accel_group(self.accel_group)
++             self.UIFrame.show()
++ 
++         self.Main = gtk.Frame()
++         self.Main.show()
++         self.Main.set_shadow_type(gtk.SHADOW_ETCHED_IN)
++ 
++         self.alignment69 = gtk.Alignment(0, 0, 1, 1)
++         self.alignment69.show()
++ 
++         self.vbox101 = gtk.VBox(gtk.FALSE, 6)
++         self.vbox101.show()
++         self.vbox101.set_spacing(6)
++         self.vbox101.set_border_width(2)
++ 
++         self.label272 = gtk.Label(_("Choose Interface to configure text color and other settings."))
++         self.label272.set_alignment(0, 0)
++         self.label272.set_padding(8, 0)
++         self.label272.set_line_wrap(gtk.TRUE)
++         self.label272.show()
++         self.vbox101.pack_start(self.label272, gtk.FALSE, gtk.FALSE, 0)
++ 
++         self.label273 = gtk.Label(_("Choose URL Catching to configure the programs used when clicking on links."))
++         self.label273.set_alignment(0, 0)
++         self.label273.set_padding(8, 0)
++         self.label273.set_line_wrap(gtk.TRUE)
++         self.label273.show()
++         self.vbox101.pack_start(self.label273, gtk.FALSE, gtk.FALSE, 0)
++ 
++         self.alignment69.add(self.vbox101)
++ 
++         self.Main.add(self.alignment69)
++ 
++         self.label276 = gtk.Label(_("User Interface Settings"))
++         self.label276.set_padding(0, 0)
++         self.label276.set_line_wrap(gtk.FALSE)
++         self.label276.show()
++         self.Main.set_label_widget(self.label276)
++ 
++ 
++         if create:
++             self.UIFrame.add(self.Main)
++ 
++     def get_custom_widget(self, id, string1, string2, int1, int2):
++         w = gtk.Label(_("(custom widget: %s)") % id)
++         return w
++ 
++ class MiscFrame:
++     def __init__(self, create = gtk.TRUE, accel_group = None):
++         if accel_group is None:
++              self.accel_group = gtk.AccelGroup()
++         else:
++              self.accel_group = accel_group
++         if create:
++             self.MiscFrame = gtk.Window(gtk.WINDOW_TOPLEVEL)
++             self.MiscFrame.set_title(_("Misc"))
++             self.MiscFrame.set_position(gtk.WIN_POS_NONE)
++             self.MiscFrame.add_accel_group(self.accel_group)
++             self.MiscFrame.show()
++ 
++         self.Main = gtk.Frame()
++         self.Main.show()
++         self.Main.set_shadow_type(gtk.SHADOW_ETCHED_IN)
++ 
++         self.alignment70 = gtk.Alignment(0, 0, 1, 1)
++         self.alignment70.show()
++ 
++         self.vbox102 = gtk.VBox(gtk.FALSE, 6)
++         self.vbox102.show()
++         self.vbox102.set_spacing(6)
++         self.vbox102.set_border_width(2)
++ 
++         self.label277 = gtk.Label(_("Choose Away mode to configure your auto-away settings."))
++         self.label277.set_alignment(0, 0)
++         self.label277.set_padding(8, 0)
++         self.label277.set_line_wrap(gtk.TRUE)
++         self.label277.show()
++         self.vbox102.pack_start(self.label277, gtk.FALSE, gtk.FALSE, 0)
++ 
++         self.label278 = gtk.Label(_("Choose User info to add text and an image to your personal info."))
++         self.label278.set_alignment(0, 0)
++         self.label278.set_padding(8, 0)
++         self.label278.set_line_wrap(gtk.TRUE)
++         self.label278.show()
++         self.vbox102.pack_start(self.label278, gtk.FALSE, gtk.FALSE, 0)
++ 
++         self.label280 = gtk.Label(_("Choose Ban / ignore to manage your ban list and ignore list."))
++         self.label280.set_alignment(0, 0)
++         self.label280.set_padding(8, 0)
++         self.label280.set_line_wrap(gtk.TRUE)
++         self.label280.show()
++         self.vbox102.pack_start(self.label280, gtk.FALSE, gtk.FALSE, 0)
++ 
++         self.label281 = gtk.Label(_("Choose Logging to configure what's logged and where to save the logs."))
++         self.label281.set_alignment(0, 0)
++         self.label281.set_padding(8, 0)
++         self.label281.set_line_wrap(gtk.TRUE)
++         self.label281.show()
++         self.vbox102.pack_start(self.label281, gtk.FALSE, gtk.FALSE, 0)
++ 
++         self.label282 = gtk.Label(_("Choose Searches to configure search settings and to set default search filters."))
++         self.label282.set_alignment(0, 0)
++         self.label282.set_padding(8, 0)
++         self.label282.set_line_wrap(gtk.TRUE)
++         self.label282.show()
++         self.vbox102.pack_start(self.label282, gtk.FALSE, gtk.FALSE, 0)
++ 
++         self.label283 = gtk.Label(_("Choose Events to configure what commands are executed upon the completion of downloads."))
++         self.label283.set_alignment(0, 0)
++         self.label283.set_padding(8, 0)
++         self.label283.set_line_wrap(gtk.TRUE)
++         self.label283.show()
++         self.vbox102.pack_start(self.label283, gtk.FALSE, gtk.FALSE, 0)
++ 
++         self.alignment70.add(self.vbox102)
++ 
++         self.Main.add(self.alignment70)
++ 
++         self.label279 = gtk.Label(_("Miscellaneous Settings"))
++         self.label279.set_padding(0, 0)
++         self.label279.set_line_wrap(gtk.FALSE)
++         self.label279.show()
++         self.Main.set_label_widget(self.label279)
++ 
++ 
++         if create:
++             self.MiscFrame.add(self.Main)
++ 
++     def get_custom_widget(self, id, string1, string2, int1, int2):
++         w = gtk.Label(_("(custom widget: %s)") % id)
++         return w
++ 
+diff -rc nicotine-1.0.8/pynicotine/gtkgui/settingswindow.py nicotine-daelstorm/pynicotine/gtkgui/settingswindow.py
+*** nicotine-1.0.8/pynicotine/gtkgui/settingswindow.py	2004-01-13 20:56:51.000000000 +0200
+--- nicotine-daelstorm/pynicotine/gtkgui/settingswindow.py	2004-12-23 13:44:09.000000000 +0200
+***************
+*** 105,127 ****
+  	def OnChooseIncompleteDir(self, widget):
+  		dir = ChooseDir(self.Main.get_toplevel(), self.IncompleteDir.get_text())
+  		if dir is not None:
+! 			self.incompletedir = dir
+! 			self.IncompleteDir.set_text(recode(dir))
+  
+  	def OnChooseDownloadDir(self, widget):
+  		dir = ChooseDir(self.Main.get_toplevel(), self.DownloadDir.get_text())
+  		if dir is not None:
+! 			self.DownloadDir.set_text(recode(dir))
+! 			if self.ShareDownloadDir.get_active():
+! 				self.needrescan = 1
+  
+  	def OnAddSharedDir(self, widget):
+! 		dir = ChooseDir(self.Main.get_toplevel())
+! 		if dir is not None:
+! 			if dir not in self.shareddirs:
+! 				self.shareslist.append([recode(dir), dir])
+! 				self.shareddirs.append(dir)
+! 				self.needrescan = 1
+  
+  	def _RemoveSharedDir(self, model, path, iter, list):
+  		list.append(iter)
+--- 105,131 ----
+  	def OnChooseIncompleteDir(self, widget):
+  		dir = ChooseDir(self.Main.get_toplevel(), self.IncompleteDir.get_text())
+  		if dir is not None:
+! 			for directory in dir: # iterate over selected files
+! 				self.incompletedir = directory
+! 				self.IncompleteDir.set_text(recode(directory))
+  
+  	def OnChooseDownloadDir(self, widget):
+  		dir = ChooseDir(self.Main.get_toplevel(), self.DownloadDir.get_text())
++ 
+  		if dir is not None:
+! 			for directory in dir: # iterate over selected files
+! 				self.DownloadDir.set_text(recode(directory))
+! 				if self.ShareDownloadDir.get_active():
+! 					self.needrescan = 1
+  
+  	def OnAddSharedDir(self, widget):
+! 		dir1 = ChooseDir(self.Main.get_toplevel())
+! 		if dir1 is not None:
+! 		    for directory in dir1:
+! 			if directory not in self.shareddirs:
+! 			    self.shareslist.append([recode(directory), directory])
+! 			    self.shareddirs.append(directory)
+! 			    self.needrescan = 1
+  
+  	def _RemoveSharedDir(self, model, path, iter, list):
+  		list.append(iter)
+***************
+*** 472,478 ****
+  	def OnChooseLogDir(self, widget):
+  		dir = ChooseDir(self.Main.get_toplevel(), self.LogDir.get_text())
+  		if dir is not None:
+! 			self.LogDir.set_text(recode(dir))
+  
+  class SearchFrame(settings_glade.SearchFrame):
+  	def __init__(self):
+--- 476,484 ----
+  	def OnChooseLogDir(self, widget):
+  		dir = ChooseDir(self.Main.get_toplevel(), self.LogDir.get_text())
+  		if dir is not None:
+! 			for directory in dir: # iterate over selected files
+! 				self.LogDir.set_text(recode(directory))
+! 
+  
+  class SearchFrame(settings_glade.SearchFrame):
+  	def __init__(self):
+***************
+*** 633,638 ****
+--- 639,670 ----
+  		self.protocolmodel.remove(self.protocols[key][0])
+  		del self.protocols[key]
+  
++ class ConnectionFrame(settings_glade.ConnectionFrame):
++ 	def __init__(self):
++ 		settings_glade.ConnectionFrame.__init__(self, gtk.FALSE)
++ 	def SetSettings(self, config):
++ 		return {}
++ 	def GetSettings(self):
++ 		return {}
++ 		
++ class UIFrame(settings_glade.UIFrame):
++ 	def __init__(self):
++ 		settings_glade.UIFrame.__init__(self, gtk.FALSE)
++ 	def SetSettings(self, config):
++ 		return {}
++ 	def GetSettings(self):
++ 		return {}
++ 
++ class MiscFrame(settings_glade.MiscFrame):
++ 	def __init__(self):
++ 		settings_glade.MiscFrame.__init__(self, gtk.FALSE)
++ 	def SetSettings(self, config):
++ 		return {}
++ 	def GetSettings(self):
++ 		return {}
++ 		
++ 		
++ 		
+  class SettingsWindow(settings_glade.SettingsWindow):
+  	def __init__(self, frame):
+  		settings_glade.SettingsWindow.__init__(self)
+***************
+*** 678,689 ****
+--- 710,724 ----
+  		
+  		p[_("Server")] = ServerFrame(frame.np.getencodings())
+  		p[_("Shares")] = SharesFrame()
++ 		p[_("Connection")] = ConnectionFrame()
+  		p[_("Transfers")] = TransfersFrame()
+  		p[_("Geo Block")] = GeoBlockFrame()
+  		p[_("User info")] = UserinfoFrame()
+  		p[_("Ban / ignore")] = BanFrame()
++ 		p[_("UI")] = UIFrame()
+  		p[_("Interface")] = BloatFrame()
+  		p[_("URL Catching")] = UrlCatchFrame()
++ 		p[_("Misc")] = MiscFrame()
+  		p[_("Logging")] = LogFrame()
+  		p[_("Searches")] = SearchFrame()
+  		p[_("Away mode")] = AwayFrame()
+diff -rc nicotine-1.0.8/pynicotine/gtkgui/userbrowse.py nicotine-daelstorm/pynicotine/gtkgui/userbrowse.py
+*** nicotine-1.0.8/pynicotine/gtkgui/userbrowse.py	2004-05-01 18:40:23.000000000 +0300
+--- nicotine-daelstorm/pynicotine/gtkgui/userbrowse.py	2004-12-23 02:04:27.000000000 +0200
+***************
+*** 218,230 ****
+  		dir = ChooseDir(self.frame.MainWindow, self.frame.np.config.sections["transfers"]["downloaddir"])
+  		if dir is None:
+  			return
+! 		self.DownloadDirectory(self.selected_folder, os.path.join(dir, ""))
+  
+  	def OnDownloadDirectoryRecursiveTo(self, widget):
+  		dir = ChooseDir(self.frame.MainWindow, self.frame.np.config.sections["transfers"]["downloaddir"])
+  		if dir is None:
+  			return
+! 		self.DownloadDirectory(self.selected_folder, os.path.join(dir, ""), 1)
+  	
+  	def DownloadDirectory(self, node, prefix = "", recurse = 0):
+  		dir = node.path
+--- 218,244 ----
+  		dir = ChooseDir(self.frame.MainWindow, self.frame.np.config.sections["transfers"]["downloaddir"])
+  		if dir is None:
+  			return
+! 
+! 		for directory in dir: # iterate over selected files
+! 			try:
+!  				
+! 				self.DownloadDirectory(self.selected_folder, os.path.join(directory, ""))
+! 				
+! 			except IOError: # failed to open
+! 				self.message('failed to open %r for reading', directory) # notify user
+  
+  	def OnDownloadDirectoryRecursiveTo(self, widget):
+  		dir = ChooseDir(self.frame.MainWindow, self.frame.np.config.sections["transfers"]["downloaddir"])
+  		if dir is None:
+  			return
+! 		for directory in dir: # iterate over selected files
+! 			try:
+!  				
+! 				self.DownloadDirectory(self.selected_folder, os.path.join(directory, ""), 1)
+! 				
+! 			except IOError: # failed to open
+! 				self.message('failed to open %r for reading', directory) # notify user
+! 
+  	
+  	def DownloadDirectory(self, node, prefix = "", recurse = 0):
+  		dir = node.path
+***************
+*** 245,251 ****
+  		ldir = ChooseDir(self.frame.MainWindow, self.frame.np.config.sections["transfers"]["downloaddir"])
+  		if ldir is None:
+  			return
+! 		self.OnDownloadFiles(widget, ldir)
+  
+  	def OnSearch(self, widget):
+  		text = widget.get_text().lower()
+--- 259,271 ----
+  		ldir = ChooseDir(self.frame.MainWindow, self.frame.np.config.sections["transfers"]["downloaddir"])
+  		if ldir is None:
+  			return
+! 
+! 		for directory in ldir: # iterate over selected files
+! 			try:
+!  				self.OnDownloadFiles(widget, directory)
+! 				
+! 			except IOError: # failed to open
+! 				self.message('failed to open %r for reading', directory) # notify user
+  
+  	def OnSearch(self, widget):
+  		text = widget.get_text().lower()
+diff -rc nicotine-1.0.8/pynicotine/utils.py nicotine-daelstorm/pynicotine/utils.py
+*** nicotine-1.0.8/pynicotine/utils.py	2004-12-24 21:56:28.000000000 +0200
+--- nicotine-daelstorm/pynicotine/utils.py	2004-12-23 03:46:38.000000000 +0200
+***************
+*** 7,14 ****
+  This module contains utility fuctions.
+  """
+  
+! version = "1.0.8"
+! latesturl = "http://nicotine.thegraveyard.org/LATEST"
+  
+  import string
+  import os.path
+--- 7,14 ----
+  This module contains utility fuctions.
+  """
+  
+! version = "1.0.8z"
+! latesturl = "http://nicotine.thegraveyard.org/LATEST-RC"
+  
+  import string
+  import os.path

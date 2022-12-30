@@ -1,0 +1,37 @@
+diff -rNu3 slsk-tmp1/pysoulseek/transfers.py slsk-tmp2/pysoulseek/transfers.py
+--- slsk-tmp1/pysoulseek/transfers.py	2003-07-25 21:41:09.000000000 +0200
++++ slsk-tmp2/pysoulseek/transfers.py	2003-07-25 21:41:09.000000000 +0200
+@@ -366,8 +366,8 @@
+                 else:
+                     banmsg = "Banned"
+ 		self.queue.put(slskmessages.QueueFailed(conn = msg.conn.conn, file = msg.file, reason = banmsg))
+-            elif self.totalQueueLimitReached():
+-                uploadslimit = self.eventprocessor.config.sections["transfers"]["queuelimit"]
++            elif limits and self.eventprocessor.config.sections["transfers"]["totalqueue"] and self.totalQueueLimitReached():
++                uploadslimit = self.eventprocessor.config.sections["transfers"]["totalqueuelimit"]
+ 		limitmsg = "Total limit of %i megabytes exceeded" %(uploadslimit)
+                 self.queue.put(slskmessages.QueueFailed(conn = msg.conn.conn, file = msg.file, reason = limitmsg)) 
+             elif self.queueLimitReached(user):
+diff -rNu3 slsk-tmp1/pysoulseek/utils.py slsk-tmp2/pysoulseek/utils.py
+--- slsk-tmp1/pysoulseek/utils.py	2003-07-25 21:41:09.000000000 +0200
++++ slsk-tmp2/pysoulseek/utils.py	2003-07-25 21:41:09.000000000 +0200
+@@ -9,7 +9,7 @@
+ import os,dircache
+ import mp3
+ 
+-version = "1.2.3-hyriand-10.1"
++version = "1.2.3-hyriand-10.2"
+ 
+ def getServerList(url):
+         """ Parse server text file from http://www.slsk.org and 
+diff -rNu3 slsk-tmp1/pysoulseek/wxgui/transfers.py slsk-tmp2/pysoulseek/wxgui/transfers.py
+--- slsk-tmp1/pysoulseek/wxgui/transfers.py	2003-07-25 21:41:09.000000000 +0200
++++ slsk-tmp2/pysoulseek/wxgui/transfers.py	2003-07-25 21:41:09.000000000 +0200
+@@ -79,7 +79,6 @@
+ 	    else:
+ 	        return item.status
+ 	if col == 3:
+-	    return locale.format("%s",item.size,1)
+ 	    if not sort:
+ 	        return self.Humanize(item.size)
+ 	    else:

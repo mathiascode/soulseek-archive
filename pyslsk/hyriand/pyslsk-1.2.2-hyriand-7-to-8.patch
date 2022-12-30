@@ -1,0 +1,413 @@
+diff -rNu3 slsk-tmp1/pysoulseek/config.py slsk-tmp2/pysoulseek/config.py
+--- slsk-tmp1/pysoulseek/config.py	2003-07-11 21:53:24.000000000 +0200
++++ slsk-tmp2/pysoulseek/config.py	2003-07-11 21:53:24.000000000 +0200
+@@ -36,13 +36,13 @@
+ 	"transfers":{"downloaddir":None,"sharedownloaddir":1,"shared":None, \
+ 	"preferfriends":0, "useupslots":0, "uploadslots":2, "incompletedir":"", \
+ 	"uploadbandwidth":100,"uselimit":0,"uploadlimit":100,"limitby":1, \
+-	"afterfinish":"", \
++	"afterfinish":"", "afterfolder":"", \
+ 	"usecustomban":0,"customban":"don't bother to retry", "queuelimit":100,\
+ 	"downloads":[],"sharedfiles":{},"sharedfilesstreams":{}, \
+ 	"wordindex":{},"fileindex":{},"sharedmtimes":{},"rescanonstartup":0}, \
+ 	"userinfo":{"descr":"''","pic":""},"logging": \
+ 	{"logsdir":os.path.expanduser("~"),"privatechat":0,"chatrooms":0}, \
+-	"searches":{"maxresults":50,"re_filter":0}, \
++	"searches":{"maxresults":50,"re_filter":0,"history":[]}, \
+  	"ui":{"chatme":"FOREST GREEN", "chatremote":"","chatlocal":"BLUE", \
+  	"chathilite":"", "search":"","searchq":"GREY", "decimalsep":","}}
+ 
+@@ -57,7 +57,7 @@
+     def needConfig(self):
+ 	for i in self.sections.keys():
+ 	    for j in self.sections[i].keys():
+-		if self.sections[i][j] is None or self.sections[i][j] == '' and i not in ("userinfo", "ui") and j not in ("incompletedir", "autoreply", 'afterfinish'):
++		if self.sections[i][j] is None or self.sections[i][j] == '' and i not in ("userinfo", "ui") and j not in ("incompletedir", "autoreply", 'afterfinish','afterfolder'):
+ 		    return 1
+ 	return 0
+ 
+@@ -69,7 +69,7 @@
+ 		    print "Bogus config section:",i
+ 		elif j not in self.sections[i].keys():
+ 		    print "Bogus config option",j,"section",i
+-		elif j in ['login','passw','enc','downloaddir','customban','descr','pic','logsdir','incompletedir', 'autoreply', 'afterfinish'] or i == "ui":
++		elif j in ['login','passw','enc','downloaddir','customban','descr','pic','logsdir','incompletedir', 'autoreply', 'afterfinish', 'afterfolder'] or i == "ui":
+ 		    self.sections[i][j] = val
+ 		else:
+ 		    try:
+diff -rNu3 slsk-tmp1/pysoulseek/pysoulseek.py slsk-tmp2/pysoulseek/pysoulseek.py
+--- slsk-tmp1/pysoulseek/pysoulseek.py	2003-07-11 21:53:24.000000000 +0200
++++ slsk-tmp2/pysoulseek/pysoulseek.py	2003-07-11 21:53:24.000000000 +0200
+@@ -134,6 +134,7 @@
+ 			slskmessages.Msg83:self.Msg83,
+ 			slskmessages.Msg84:self.Msg83,
+ 			slskmessages.Msg85:self.Msg83,
++                        slskmessages.ServerPing:self.Msg83,
+ 			slskmessages.ParentInactivityTimeout:self.Msg83,
+ 			slskmessages.SearchInactivityTimeout:self.Msg83,
+ 			slskmessages.MinParentsInCache:self.Msg83,
+@@ -330,6 +331,7 @@
+ 
+     def ServerConn(self, msg):
+ 	self.setStatus("Connected to server %s:%s, logging in..." %(msg.addr[0],msg.addr[1]))
++	time.sleep(1)
+ 	self.serverconn = msg.conn
+ 	self.servertimeout = -1
+ 	self.users = {}
+diff -rNu3 slsk-tmp1/pysoulseek/slskmessages.py slsk-tmp2/pysoulseek/slskmessages.py
+--- slsk-tmp1/pysoulseek/slskmessages.py	2003-06-18 01:00:13.000000000 +0200
++++ slsk-tmp2/pysoulseek/slskmessages.py	2003-07-11 21:53:24.000000000 +0200
+@@ -176,6 +176,13 @@
+ class DistribMessage(SlskMessage):
+     pass
+ 
++class ServerPing(ServerMessage):
++    def makeNetworkMessage(self):
++        return ""
++        
++    def parseNetworkMessage(self, message):
++        pass
++
+ class Login(ServerMessage):
+     """ We sent this to the server right after the connection has been 
+     established. Server responds with the greeting message. """
+@@ -719,7 +726,12 @@
+ #	f = open("ttty","w")
+ #	f.write(message)
+ #	f.close()
+-	message=zlib.decompress(message)
++	try:
++		message=zlib.decompress(message)
++	except Exception, error:
++		print error
++		self.list={}
++		return
+ #	f = open("ttt","w")
+ #	f.write(message)
+ #	f.close()
+diff -rNu3 slsk-tmp1/pysoulseek/slskproto.py slsk-tmp2/pysoulseek/slskproto.py
+--- slsk-tmp1/pysoulseek/slskproto.py	2003-05-11 21:38:28.000000000 +0200
++++ slsk-tmp2/pysoulseek/slskproto.py	2003-07-11 21:53:24.000000000 +0200
+@@ -66,7 +66,7 @@
+     with length and message code followed by the actual messsage data. 
+     These are the codes."""
+ 
+-    servercodes = {Login:1,SetWaitPort:2,
++    servercodes = {ServerPing:32,Login:1,SetWaitPort:2,
+                    GetPeerAddress:3,AddUser:5,GetUserStatus:7,SayChatroom:13,
+                    JoinRoom:14,LeaveRoom:15,UserJoinedRoom:16,UserLeftRoom:17,
+                    ConnectToPeer:18,MessageUser:22,MessageAcked:23,
+diff -rNu3 slsk-tmp1/pysoulseek/transfers.py slsk-tmp2/pysoulseek/transfers.py
+--- slsk-tmp1/pysoulseek/transfers.py	2003-07-11 21:53:24.000000000 +0200
++++ slsk-tmp2/pysoulseek/transfers.py	2003-07-11 21:53:24.000000000 +0200
+@@ -580,15 +580,21 @@
+ 			    self.eventprocessor.sendNumSharedFoldersFiles()
+ 			    self.SaveDownloads()
+ 			    self.downloadspanel.update(i)
+-			    if self.eventprocessor.config.sections["transfers"]["afterfinish"]:
+-			        escaped = ""
+-			        for ch in newname:
+-			           if ch not in string.ascii_letters+string.digits+"/":
+-			               escaped += "\\"
+-			           escaped += ch
+-			        command = self.eventprocessor.config.sections["transfers"]["afterfinish"].replace("$", escaped)
++			    if self.eventprocessor.config.sections["transfers"]["afterfinish"] and i.path:
++			        command = self.eventprocessor.config.sections["transfers"]["afterfinish"].replace("$", utils.escapeCommand(newname))
+ 			        os.system(command)
+ 			        self.eventprocessor.logMessage("Executed: %s" % command)
++			    if self.eventprocessor.config.sections["transfers"]["afterfolder"]:
++			        # walk through downloads and break if any file in the same folder exists, else execute
++			        for ia in self.downloads:
++			            if ia.status not in ['Finished','Aborted'] and ia.path and ia.path[0] == '/' and ia.path == folder:
++			                break
++			            elif ia.status not in ['Finished','Aborted'] and os.path.join(downloaddir, ia.path) == folder:
++			                break
++			        else:
++			            command = self.eventprocessor.config.sections["transfers"]["afterfolder"].replace("$", utils.escapeCommand(folder))
++			            os.system(command)
++			            self.eventprocessor.logMessage("Executed on folder: %s" % command)
+ 		    except IOError, (errno, strerror):
+ 			self.eventprocessor.logMessage("I/O error(%s): %s" % (errno, strerror))
+                         i.status = "Local file error"
+diff -rNu3 slsk-tmp1/pysoulseek/utils.py slsk-tmp2/pysoulseek/utils.py
+--- slsk-tmp1/pysoulseek/utils.py	2003-07-11 21:53:24.000000000 +0200
++++ slsk-tmp2/pysoulseek/utils.py	2003-07-11 21:53:24.000000000 +0200
+@@ -9,7 +9,7 @@
+ import os,dircache
+ import mp3
+ 
+-version = "1.2.2-hyriand-7"
++version = "1.2.2-hyriand-8"
+ 
+ def getServerList(url):
+         """ Parse server text file from http://www.slsk.org and 
+@@ -278,4 +278,15 @@
+             ret = ret + alias[i]
+             i = i + 1
+     return ret
++
++def escapeCommand(filename):
++    """Escapes special characters for command execution"""
++    escaped = ""
++    for ch in filename:
++       if ch not in string.ascii_letters+string.digits+"/":
++           escaped += "\\"
++       escaped += ch
++    return escaped
++
++    
+      
+diff -rNu3 slsk-tmp1/pysoulseek/wxgui/about.py slsk-tmp2/pysoulseek/wxgui/about.py
+--- slsk-tmp1/pysoulseek/wxgui/about.py	2003-07-11 21:53:24.000000000 +0200
++++ slsk-tmp2/pysoulseek/wxgui/about.py	2003-07-11 21:53:24.000000000 +0200
+@@ -81,7 +81,7 @@
+ 	    ]
+ 	else:
+ 	    help = [ \
+-	        "/close", "Close the current private chat",
++	        "/close /c", "Close the current private chat",
+ 	        "/clear /cl", "Clear the chat window",
+ 	        "", "",
+ 	        "/add /ad [user]", "Add user 'user' to your user list",
+diff -rNu3 slsk-tmp1/pysoulseek/wxgui/configwindow.py slsk-tmp2/pysoulseek/wxgui/configwindow.py
+--- slsk-tmp1/pysoulseek/wxgui/configwindow.py	2003-07-11 21:53:24.000000000 +0200
++++ slsk-tmp2/pysoulseek/wxgui/configwindow.py	2003-07-11 21:53:24.000000000 +0200
+@@ -432,6 +432,7 @@
+ 	self.coloursearchqueue = ColourPicker(self, -1, "With queue:")
+ 	self.decimalsep = wxComboBox(self, -1, style=wxCB_DROPDOWN|wxCB_READONLY, choices = ["<none>", ",", ".", "<space>"])
+ 	self.afterdownload = wxTextCtrl(self, -1)
++	self.afterfolder = wxTextCtrl(self, -1)
+ 
+ 	uisizer=wxStaticBoxSizer(wxStaticBox(self,-1,"Colours:"),wxVERTICAL)
+ 	uisizer.Add(wxStaticText(self,-1,"Chat colours:"), flag=wxLEFT|wxTOP, border = 10)
+@@ -458,6 +459,11 @@
+ 	commandsizer.Add(self.afterdownload, flag=wxEXPAND)
+ 	uisizer.Add(commandsizer, flag=wxALL|wxEXPAND, border=10)
+ 	
++	commanddsizer = wxBoxSizer(wxVERTICAL)
++	commanddsizer.Add(wxStaticText(self, -1, "Run command after folder finishes ($ for folder path):"))
++	commanddsizer.Add(self.afterfolder, flag=wxEXPAND)
++	uisizer.Add(commanddsizer, flag=wxALL|wxEXPAND, border=10)
++
+ 	self.SetSizer(uisizer)
+ 	self.SetAutoLayout(True)
+ 
+@@ -645,6 +651,8 @@
+         self.transferspanel.OnUploadChoose(None)
+         if transfers["afterfinish"] is not None:
+             self.uipanel.afterdownload.SetValue(transfers["afterfinish"])
++        if transfers["afterfolder"] is not None:
++            self.uipanel.afterfolder.SetValue(transfers["afterfolder"])
+ 	if userinfo["descr"] is not None:
+ 	    self.userinfopanel.descr.SetValue(eval(userinfo["descr"]))
+ 	if userinfo["pic"] is not None:
+@@ -751,6 +759,7 @@
+ 		"uploadslots":uploadslots, \
+ 		"useupslots":useupslots, \
+ 		"afterfinish":encode(self.uipanel.afterdownload.GetValue()), \
++		"afterfolder":encode(self.uipanel.afterfolder.GetValue()), \
+ 		"preferfriends":encode(self.transferspanel.preferfriends.GetValue()), \
+ 		"uselimit":encode(self.transferspanel.useuploadlimit.GetValue()), \
+ 		"usecustomban":encode(self.miscpanel.usecustomban.GetValue()), \
+diff -rNu3 slsk-tmp1/pysoulseek/wxgui/frame.py slsk-tmp2/pysoulseek/wxgui/frame.py
+--- slsk-tmp1/pysoulseek/wxgui/frame.py	2003-07-11 21:53:24.000000000 +0200
++++ slsk-tmp2/pysoulseek/wxgui/frame.py	2003-07-11 21:53:24.000000000 +0200
+@@ -66,6 +66,10 @@
+         wxFrame.__init__(self,parent,id,title, name=title, size = (800,600), style = wxDEFAULT_FRAME_STYLE|wxMAXIMIZE|wxNO_FULL_REPAINT_ON_RESIZE)
+ 	self.EVT_NETWORK_ID = wxNewId()     
+ 	self.EVT_NETWORK(self, self.EVT_NETWORK_ID, self.OnNetworkEvent)
++	
++	timerid = wxNewId()
++	self.pingtimer = wxTimer(self, timerid)
++	EVT_TIMER(self, timerid, self.OnPing)
+ 
+ 	self.app = app
+ 
+@@ -373,6 +377,7 @@
+ 	self.mainmenu.Enable(self.awayID,0)
+ 
+     def ConnClose(self,conn, addr):
++        self.pingtimer.Stop()
+ 	self.SetStatusText("Offline", 1)
+         self.mainmenu.Enable(self.connectID,1)
+         self.mainmenu.Enable(self.disconnectID,0)
+@@ -416,6 +421,9 @@
+         self.mainmenu.Enable(self.checkprivID,1)
+ 	self.mainmenu.Enable(self.awayID,1)
+         chatrooms.roomsctrl.SetGreeting(msg.banner)
++        
++        self.pingtimer.Start(30*1000)
++        
+ 	return privatechat,chatrooms,userinfo,userbrowse,searchw,downloads,uploads, userlistpanel
+ 
+     def BanUser(self,user):
+@@ -495,6 +503,9 @@
+ 	""" Network event macro """
+ 	win.Connect(-1, -1, id, func) 
+ 
++    def OnPing(self, event):
++    	self.np.queue.put(slskmessages.ServerPing())
++    	
+ class MainApp(wxApp): 
+     """ Application class. """
+     def __init__(self,config):
+diff -rNu3 slsk-tmp1/pysoulseek/wxgui/search.py slsk-tmp2/pysoulseek/wxgui/search.py
+--- slsk-tmp1/pysoulseek/wxgui/search.py	2003-07-11 21:53:24.000000000 +0200
++++ slsk-tmp2/pysoulseek/wxgui/search.py	2003-07-11 21:53:24.000000000 +0200
+@@ -36,7 +36,7 @@
+ 	self.onupdate = onupdate
+ 	self.frame = frame
+ 	self.context = wxRadioBox(self, -1, "", choices = ["Global","Buddies","Joined rooms"], style = wxRA_SPECIFY_COLS | wxNO_BORDER)
+-        self.search =  wxTextCtrl(self,-1, style = wxTE_PROCESS_ENTER)
++        self.search =  wxComboBox(self,-1, choices=[""]+self.frame.np.config.sections["searches"]["history"])
+         self.searchbutton = wxButton(self, -1, "Search")
+         self.resultsnb = notebook.IconNotebook(self, -1, style = wxCLIP_CHILDREN)
+         sizerh = wxBoxSizer(wxHORIZONTAL)
+@@ -88,14 +88,27 @@
+     def OnSearch(self, event):
+         """ Process search request"""
+ 	context = self.context.GetSelection()
+-	text = self.frame.np.encode(self.search.GetLineText(0))
++	text = self.frame.np.encode(self.search.GetValue())
++	if not text.strip():
++	    return
++	history = self.frame.np.config.sections["searches"]["history"]
++	if text in history:
++	    history.remove(text)
++	elif len(history) > 9:
++	   del history[-1]
++	history.insert(0, text)
++        self.frame.np.config.writeConfig()
++        self.search.Clear()
++        self.search.Append("")
++        for item in history:
++            self.search.Append(item)
+ 	if context == 0:
+ 	    self.DoGlobalSearch(text)
+ 	elif context == 1:
+ 	    self.DoBuddySearch(text)
+ 	elif context == 2:
+ 	    self.DoRoomsSearch(text)
+-        self.search.Clear()
++        self.search.SetValue("")
+ 
+     def CreateTab(self, text, auto, title = None):
+ 	requestid = wxNewId()
+@@ -150,6 +163,7 @@
+     def MakeSearchTab(self, requestid, canRemember = True):
+         """ Create a result window, which is a notebook tab. """
+         panel = wxPanel(self.resultsnb, -1)
++        panel.filters = wxCheckBox(panel, -1, label = "Enable filters")
+         panel.filterin =  wxTextCtrl(panel, -1, value = "", size = wxSize(55,20), style = wxTE_PROCESS_ENTER)
+         panel.filterout =  wxTextCtrl(panel, -1, value = "", size = wxSize(55,20), style = wxTE_PROCESS_ENTER)
+         panel.filtersize =  wxTextCtrl(panel, -1, value = "", size = wxSize(55,20), style = wxTE_PROCESS_ENTER)
+@@ -158,38 +172,45 @@
+         close = wxButton(panel, -1, "Close")
+ 	closeignore = wxButton(panel, -1, "Close and ignore")
+ 	panel.rememberctrl = wxCheckBox(panel, -1, label = "Remember")
+-        list = SearchList(panel, -1, self.processrequest, self.privatechat, self.info, self.browse, self.transfers,self.frame)
++        panel.list = SearchList(panel, -1, self.processrequest, self.privatechat, self.info, self.browse, self.transfers,self.frame)
++        panel.sizer = sizerv = wxBoxSizer(wxVERTICAL)
+         sizerh = wxBoxSizer(wxHORIZONTAL)
++        sizerh.Add(panel.filters)
++        sizerh.Add(60,10,1,wxEXPAND)
++	sizerh.Add(closeignore)
++        sizerh.Add(close)
++	sizerh.Add(panel.rememberctrl)
++        sizerv.Add(sizerh, 0, wxEXPAND)
++
++        panel.filtersizer = sizerh = wxBoxSizer(wxHORIZONTAL)
+         sizerh.Add(wxStaticText(panel, -1, label = " Filter In: "), flag = wxALIGN_CENTER)
+-        sizerh.Add(panel.filterin)
++        sizerh.Add(panel.filterin, 1, wxEXPAND)
+         sizerh.Add(wxStaticText(panel, -1, label = " Filter Out: "), flag = wxALIGN_CENTER)
+-        sizerh.Add(panel.filterout)
++        sizerh.Add(panel.filterout, 1, wxEXPAND)
+         sizerh.Add(wxStaticText(panel, -1, label = " Size: "), flag = wxALIGN_CENTER)
+         sizerh.Add(panel.filtersize)
+         sizerh.Add(wxStaticText(panel, -1, label = " Bitrate: "), flag = wxALIGN_CENTER)
+         sizerh.Add(panel.filterbr)
+         sizerh.Add(panel.filterfree, flag = wxALIGN_CENTER|wxLEFT, border=5)
+-        sizerh.Add(60,10,1,wxEXPAND)
+-	sizerh.Add(closeignore)
+-        sizerh.Add(close)
+-	sizerh.Add(panel.rememberctrl)
+-        sizerv = wxBoxSizer(wxVERTICAL)
+-        sizerv.Add(sizerh,0,wxEXPAND)
+-        sizerv.Add(list,1,wxEXPAND)
++        sizerv.Add(sizerh, 0, wxEXPAND)
++        sizerv.Hide(sizerh)
++
++        sizerv.Add(panel.list,1,wxEXPAND)
+         panel.SetSizer(sizerv)
+         panel.SetAutoLayout(True)
+         EVT_BUTTON(self, close.GetId(), self.OnClose)
+ 	EVT_BUTTON(self, closeignore.GetId(), self.OnCloseIgnore)
+- 	EVT_TEXT_ENTER(self, panel.filterin.GetId(), list.OnRefilter)
+-	EVT_TEXT_ENTER(self, panel.filterout.GetId(), list.OnRefilter)
+-	EVT_TEXT_ENTER(self, panel.filtersize.GetId(), list.OnRefilter)
+-	EVT_TEXT_ENTER(self, panel.filterbr.GetId(), list.OnRefilter)
+-	EVT_CHECKBOX(self, panel.filterfree.GetId(), list.OnRefilter)
++ 	EVT_TEXT_ENTER(self, panel.filterin.GetId(), panel.list.OnRefilter)
++	EVT_TEXT_ENTER(self, panel.filterout.GetId(), panel.list.OnRefilter)
++	EVT_TEXT_ENTER(self, panel.filtersize.GetId(), panel.list.OnRefilter)
++	EVT_TEXT_ENTER(self, panel.filterbr.GetId(), panel.list.OnRefilter)
++	EVT_CHECKBOX(self, panel.filterfree.GetId(), panel.list.OnRefilter)
+         EVT_CHECKBOX(self, panel.rememberctrl.GetId(), self.OnRememberCheckClick)
++        EVT_CHECKBOX(self, panel.filters.GetId(), self.OnFiltersEnable)
+         if not canRemember:
+            panel.rememberctrl.Enable(0)
+ 
+-        return panel,list
++        return panel,panel.list
+ 
+     def Close(self, ignore):
+         """ Close the search results window."""
+@@ -228,6 +249,16 @@
+ 	     self.frame.np.config.writeConfig()
+ 	     self.searches[id][2] = value
+ 
++    def OnFiltersEnable(self, event):
++    	value = event.GetEventObject().GetValue()
++    	panel = event.GetEventObject().GetParent()
++    	if value:
++    	    panel.sizer.Show(panel.filtersizer)
++    	else:
++	    panel.sizer.Hide(panel.filtersizer)
++    	panel.sizer.Layout()
++    	panel.list.refilter()
++    	
+ class FakeRe:
+     def __init__(self, phrase):
+         self.words = phrase.split(" ")
+@@ -395,6 +426,9 @@
+         return False
+ 
+     def getFilters(self):
++        if not self.parent.filters.GetValue():
++            return None
++        
+         if self.frame.np.config.sections["searches"]["re_filter"]:
+             Searcher = re.compile
+         else:
+@@ -470,7 +504,7 @@
+ 	    else:
+ 		immdownload = ""
+             self.results.append([len(self.results)+1,name,user,size,msg.ulspeed,msg.inqueue,immdownload,bitrate,length,dir,br])
+-            if self.checkFilter(filters, name, size, br, immdownload):
++            if filters is None or self.checkFilter(filters, name, size, br, immdownload):
+                 self.results_visible.append([len(self.results),name,user,size,msg.ulspeed,msg.inqueue,immdownload,bitrate,length,dir,br])
+                 results += 1
+ 	if results and self.sortcol != -1:
+@@ -500,7 +534,10 @@
+ 
+     def refilter(self):
+         filters = self.getFilters()
+-        self.results_visible = [i for i in self.results if self.checkFilter(filters, i[1], i[3], i[10], i[6])]
++        if filters is None:
++        	self.results_visible = self.results[:]
++        else:
++	        self.results_visible = [i for i in self.results if self.checkFilter(filters, i[1], i[3], i[10], i[6])]
+         self.SetItemCount(len(self.results_visible))
+ 
+     def OnRefilter(self, event):

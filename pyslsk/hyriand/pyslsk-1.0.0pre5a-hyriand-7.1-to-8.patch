@@ -1,0 +1,300 @@
+diff -rNu3 slsk-tmp1/TODO.hyriand slsk-tmp2/TODO.hyriand
+--- slsk-tmp1/TODO.hyriand	2003-03-08 13:01:52.000000000 +0100
++++ slsk-tmp2/TODO.hyriand	2003-03-08 13:01:52.000000000 +0100
+@@ -1,3 +1,3 @@
+-Human readible numbers
+-  - Locale independant
+-  - K, G, M
++ - Fixed number of upload slots
++ - SmackleFunky's command aliases
++ - Recursive directory download
+diff -rNu3 slsk-tmp1/pysoulseek/config.py slsk-tmp2/pysoulseek/config.py
+--- slsk-tmp1/pysoulseek/config.py	2003-03-08 13:01:52.000000000 +0100
++++ slsk-tmp2/pysoulseek/config.py	2003-03-08 13:01:52.000000000 +0100
+@@ -35,7 +35,8 @@
+ 	"sharedfilesstreams":{},"sharedindex":{}},"userinfo":{"descr":"''", \
+ 	"pic":""},"logging":{"privatechat":0,"chatrooms":0},"searches":{"maxresults":50}, \
+ 	"colours":{"chatme":"FOREST GREEN", "chatremote":"","chatlocal":"BLUE", \
+-	"chathilite":"", "search":"","searchq":"GREY"},"sorting":{"insensitive": 0}}
++	"chathilite":"", "search":"","searchq":"GREY", "decimalsep":","},
++	"sorting":{"insensitive": 0}}
+ 
+ 	try:
+ 	    f = open(filename+".shares")
+diff -rNu3 slsk-tmp1/pysoulseek/utils.py slsk-tmp2/pysoulseek/utils.py
+--- slsk-tmp1/pysoulseek/utils.py	2003-03-02 17:43:23.000000000 +0100
++++ slsk-tmp2/pysoulseek/utils.py	2003-03-08 13:01:52.000000000 +0100
+@@ -141,3 +141,15 @@
+ 	d[x] = x
+     return d.values()
+      
++def Humanize(number,fashion):
++    if fashion == "" or fashion == "<none>":
++        return str(number)
++    elif fashion == "<space>":
++        fashion = " "
++    number = str(number)
++    ret = ""
++    while number[-3:]:
++        part, number = number[-3:], number[:-3]
++        ret = "%s%s%s" % (part, fashion, ret)
++    return ret[:-1]
++ 
+\ No newline at end of file
+diff -rNu3 slsk-tmp1/pysoulseek/wxgui/chat.py slsk-tmp2/pysoulseek/wxgui/chat.py
+--- slsk-tmp1/pysoulseek/wxgui/chat.py	2003-03-08 13:01:52.000000000 +0100
++++ slsk-tmp2/pysoulseek/wxgui/chat.py	2003-03-08 13:01:52.000000000 +0100
+@@ -15,8 +15,8 @@
+ import string
+ from sortablelist import sortableListCtrl
+ from wxPython.wx import *
+-import locale
+ import random
++from pysoulseek.utils import Humanize
+ 
+ 
+ def GetCompletion(part, list):
+@@ -401,12 +401,12 @@
+             return username
+         elif col == 1:
+             if not sort:
+-                return locale.format("%s",self.parent.users[username].avgspeed,1)
++                return Humanize(self.parent.users[username].avgspeed,self.parent.frame.np.config.sections["colours"]["decimalsep"])
+             else:
+                 return self.parent.users[username].avgspeed
+         elif col == 2:
+             if not sort:
+-                return locale.format("%s",self.parent.users[username].files,1)
++                return Humanize(self.parent.users[username].files,self.parent.frame.np.config.sections["colours"]["decimalsep"])
+             else:
+                 return self.parent.users[username].files
+         else:
+diff -rNu3 slsk-tmp1/pysoulseek/wxgui/configwindow.py slsk-tmp2/pysoulseek/wxgui/configwindow.py
+--- slsk-tmp1/pysoulseek/wxgui/configwindow.py	2003-03-08 13:01:52.000000000 +0100
++++ slsk-tmp2/pysoulseek/wxgui/configwindow.py	2003-03-08 13:01:52.000000000 +0100
+@@ -175,12 +175,12 @@
+ 	serverpanel = wxPanel(nb, -1)
+ 	transferspanel = wxPanel(nb, -1)
+ 	userinfopanel = wxPanel(nb, -1)
+-	colourspanel = wxPanel(nb, -1)
++	uipanel = wxPanel(nb, -1)
+ 	miscpanel = wxPanel(nb, -1)
+ 	nb.AddPage(serverpanel,"Server")
+ 	nb.AddPage(transferspanel,"Transfers")
+ 	nb.AddPage(userinfopanel,"Personal info")
+-	nb.AddPage(colourspanel,"Colours")
++	nb.AddPage(uipanel,"Interface")
+ 	nb.AddPage(miscpanel,"Miscellaneous")
+ 
+ 	self.serverctrl = wxTextCtrl(serverpanel,-1,size=wxSize(250, 25))
+@@ -277,28 +277,33 @@
+ 	userinfosizer.Add(wxStaticText(userinfopanel, -1, "Picture:"),flag=wxTOP|wxLEFT, border = 10)
+ 	userinfosizer.Add(picsizer,flag=wxLEFT|wxBOTTOM, border = 10)
+ 
+-	self.colourchatremote = ColourPicker(colourspanel, -1, "Remote text:")
+-	self.colourchatlocal = ColourPicker(colourspanel, -1, "Local text:")
+-	self.colourchatme = ColourPicker(colourspanel, -1, "/me text:")
+-	self.colourhighlight = ColourPicker(colourspanel, -1, "Highlight colour:")
+-	self.coloursearchnoqueue = ColourPicker(colourspanel, -1, "Without queue:")
+-	self.coloursearchqueue = ColourPicker(colourspanel, -1, "With queue:")
++	self.colourchatremote = ColourPicker(uipanel, -1, "Remote text:")
++	self.colourchatlocal = ColourPicker(uipanel, -1, "Local text:")
++	self.colourchatme = ColourPicker(uipanel, -1, "/me text:")
++	self.colourhighlight = ColourPicker(uipanel, -1, "Highlight colour:")
++	self.coloursearchnoqueue = ColourPicker(uipanel, -1, "Without queue:")
++	self.coloursearchqueue = ColourPicker(uipanel, -1, "With queue:")
++	self.decimalsep = wxComboBox(uipanel, -1, style=wxCB_DROPDOWN|wxCB_READONLY, choices = ["<none>", ",", ".", "<space>"])
+ 
+-	colourssizer=wxStaticBoxSizer(wxStaticBox(colourspanel,-1,"Colours:"),wxVERTICAL)
+-	colourssizer.Add(wxStaticText(colourspanel,-1,"Chat colours:"), flag=wxLEFT|wxTOP, border = 10)
++	uisizer=wxStaticBoxSizer(wxStaticBox(uipanel,-1,"Colours:"),wxVERTICAL)
++	uisizer.Add(wxStaticText(uipanel,-1,"Chat colours:"), flag=wxLEFT|wxTOP, border = 10)
+ 	chatcoloursgrid = wxFlexGridSizer(cols=3, vgap=2, hgap=5)
+ 	for i in self.colourchatremote, self.colourchatlocal, self.colourchatme, self.colourhighlight:
+ 	    chatcoloursgrid.Add(i.button, flag=wxEXPAND)
+ 	    chatcoloursgrid.Add(i.textctrl)
+ 	    chatcoloursgrid.Add(i.button2)
+-	colourssizer.Add(chatcoloursgrid, flag=wxEXPAND|wxLEFT, border=15)
+-	colourssizer.Add(wxStaticText(colourspanel,-1,"Search result colours:"),flag=wxLEFT|wxTOP, border=10)
++	uisizer.Add(chatcoloursgrid, flag=wxEXPAND|wxLEFT, border=15)
++	uisizer.Add(wxStaticText(uipanel,-1,"Search result colours:"),flag=wxLEFT|wxTOP, border=10)
+ 	searchcoloursgrid = wxFlexGridSizer(cols=3,vgap=2,hgap=5)
+ 	for i in self.coloursearchnoqueue, self.coloursearchqueue:
+ 	    searchcoloursgrid.Add(i.button, flag=wxEXPAND)
+ 	    searchcoloursgrid.Add(i.textctrl)
+ 	    searchcoloursgrid.Add(i.button2)
+-	colourssizer.Add(searchcoloursgrid, flag=wxEXPAND|wxLEFT, border=15)
++	uisizer.Add(searchcoloursgrid, flag=wxEXPAND|wxLEFT, border=15)
++	decimalsepsizer = wxBoxSizer(wxHORIZONTAL)
++	decimalsepsizer.Add(wxStaticText(uipanel, -1, "Decimal separator:"), flag=wxALIGN_CENTER|wxRIGHT, border = 5)
++	decimalsepsizer.Add(self.decimalsep)
++	uisizer.Add(decimalsepsizer, flag=wxTOP|wxLEFT, border=10)
+ 
+         miscsizer=wxStaticBoxSizer(wxStaticBox(miscpanel,-1,"Misc settings:"),wxVERTICAL)
+ 	self.loggingprivatectrl = wxCheckBox(miscpanel, -1, "Log private chat by default")
+@@ -328,8 +333,8 @@
+ 	transferspanel.SetAutoLayout(true)
+ 	userinfopanel.SetSizer(userinfosizer)
+ 	userinfopanel.SetAutoLayout(true)
+-	colourspanel.SetSizer(colourssizer)
+-	colourspanel.SetAutoLayout(true)
++	uipanel.SetSizer(uisizer)
++	uipanel.SetAutoLayout(true)
+ 	miscpanel.SetSizer(miscsizer)
+         miscpanel.SetAutoLayout(true)
+ 
+@@ -485,6 +490,8 @@
+ 	    self.coloursearchnoqueue.SetValue(colours["search"])
+ 	if colours["searchq"] is not None:
+ 	    self.coloursearchqueue.SetValue(colours["searchq"])
++	if colours["decimalsep"] is not None:
++	    self.decimalsep.SetValue(colours["decimalsep"])
+ 	if sorting["insensitive"] is not None:
+ 	    self.sortinsensitive.SetValue(sorting["insensitive"])
+ 
+@@ -555,5 +562,6 @@
+ 		"chatme":self.encode(self.colourchatme.GetValue()), \
+ 		"chathilite":self.encode(self.colourhighlight.GetValue()), \
+ 		"search":self.encode(self.coloursearchnoqueue.GetValue()), \
+-		"searchq":self.encode(self.coloursearchqueue.GetValue())}, \
++		"searchq":self.encode(self.coloursearchqueue.GetValue()),
++		"decimalsep":self.encode(self.decimalsep.GetValue())}, \
+ 		"sorting":{"insensitive": self.encode(self.sortinsensitive.GetValue())}}
+diff -rNu3 slsk-tmp1/pysoulseek/wxgui/notebook.py slsk-tmp2/pysoulseek/wxgui/notebook.py
+--- slsk-tmp1/pysoulseek/wxgui/notebook.py	2003-03-08 13:01:52.000000000 +0100
++++ slsk-tmp2/pysoulseek/wxgui/notebook.py	2003-03-08 13:01:52.000000000 +0100
+@@ -22,6 +22,7 @@
+ 	self.page = 0
+ 
+     def OnPageChanged(self, event):
++	self.hilites[self.pages[self.page]] = 0
+ 	self.page = event.GetSelection()
+ 	self.hilites[self.pages[self.page]] = 0
+ 	self.SetPageImage(self.page,-1)
+@@ -34,6 +35,7 @@
+     def DeleteAllPages(self):
+ 	wxNotebook.DeleteAllPages(self)
+ 	self.pages = []
++	self.hilites = {}
+ 	self.page = 0
+ 
+     def DeletePage(self, index):
+diff -rNu3 slsk-tmp1/pysoulseek/wxgui/search.py slsk-tmp2/pysoulseek/wxgui/search.py
+--- slsk-tmp1/pysoulseek/wxgui/search.py	2003-03-08 13:01:52.000000000 +0100
++++ slsk-tmp2/pysoulseek/wxgui/search.py	2003-03-08 13:01:52.000000000 +0100
+@@ -16,7 +16,7 @@
+ import notebook
+ from sortablelist import sortableListCtrl
+ from wxPython.wx import *
+-import locale
++from pysoulseek.utils import Humanize
+ 
+ class SearchWindow(wxPanel):
+     """ A search window with notebook that contains search results.
+@@ -240,7 +240,7 @@
+ 	    else:
+ 		return ''
+ 	else:
+-            return locale.format("%s",text,1)
++            return Humanize(text,self.frame.np.config.sections["colours"]["decimalsep"])
+ 
+     def OnGetItemAttr(self, item):
+         if self.results[item][7] == 0:
+diff -rNu3 slsk-tmp1/pysoulseek/wxgui/transfers.py slsk-tmp2/pysoulseek/wxgui/transfers.py
+--- slsk-tmp1/pysoulseek/wxgui/transfers.py	2003-03-02 19:39:48.000000000 +0100
++++ slsk-tmp2/pysoulseek/wxgui/transfers.py	2003-03-08 13:01:52.000000000 +0100
+@@ -10,7 +10,7 @@
+ import string
+ import time
+ from sortablelist import sortableListCtrl
+-import locale
++from types import StringType
+ 
+ class TransfersList(sortableListCtrl):
+     """ This is a list control for transfers. Gets transfer data from transfer
+@@ -30,6 +30,26 @@
+ 	self.update(None)
+ 
+ 
++    def Humanize(self, size):
++    	if size is None:
++    	    return None
++	priv = ""
++        if type(size) is StringType and size[-13:] == " (privileged)":
++		size, priv = size[:-13], size[-13:]
++        try:
++	    s = int(size)
++	    if s > 1024*1024*1024:
++	        r = "%.2f GB" % ((float(s) / (1024.0*1024.0*1024.0)))
++	    elif s > 1024*1024:
++	        r = "%.2f MB" % ((float(s) / (1024.0*1024.0)))
++	    elif s > 1024:
++	        r = "%.2f KB" % ((float(s) / 1024.0))
++	    else:
++                r = str(size)
++	    return r + priv
++	except:
++	    return size + priv
++
+     def update(self, item):
+ 	if item is not None:
+ 	    if item in self.list:
+@@ -53,9 +73,9 @@
+ 	if col == 1:
+ 	    return item.user
+ 	if col == 2:
+-	    return item.status
++	    return self.Humanize(item.status)
+ 	if col == 3:
+-	    return locale.format("%s",item.size,1)
++	    return self.Humanize(item.size)
+ 	if col == 4:
+             if item.speed is not None:
+ 	        return "%.1f" %(item.speed)
+diff -rNu3 slsk-tmp1/pysoulseek/wxgui/userinfobrowse.py slsk-tmp2/pysoulseek/wxgui/userinfobrowse.py
+--- slsk-tmp1/pysoulseek/wxgui/userinfobrowse.py	2003-03-08 13:01:52.000000000 +0100
++++ slsk-tmp2/pysoulseek/wxgui/userinfobrowse.py	2003-03-08 13:01:52.000000000 +0100
+@@ -16,7 +16,7 @@
+ import notebook
+ from sortablelist import sortableListCtrl
+ from wxPython.wx import *
+-import locale
++from pysoulseek.utils import Humanize
+ 
+ class UserNotebook(notebook.IconNotebook):
+     """ This is a notebook with user's information. Used to show either
+@@ -200,7 +200,7 @@
+ 
+ class FileListCtrl(sortableListCtrl):
+     """ This is a list of a user's files in a particular directory"""
+-    def __init__(self, parent, id, style = wxLC_REPORT|wxLC_VIRTUAL|wxSUNKEN_BORDER|wxLC_VRULES):
++    def __init__(self, parent, id, frame, style = wxLC_REPORT|wxLC_VIRTUAL|wxSUNKEN_BORDER|wxLC_VRULES):
+         sortableListCtrl.__init__(self,parent,id,style = style)
+         self.InsertColumn(0,"Filename", width=200)
+         self.InsertColumn(1,"Size",width=100,format=wxLIST_FORMAT_RIGHT)
+@@ -210,6 +210,7 @@
+         self.dir = None
+ 
+         self.parent = parent
++        self.frame = frame
+ 
+     def SetFileList(self, list):
+         """ Actually sets the list."""
+@@ -234,7 +235,7 @@
+             return item[1]
+         if col == 1:
+             if not sort:
+-                return locale.format("%s", item[2], 1)
++                return Humanize(item[2],self.frame.np.config.sections["colours"]["decimalsep"])
+             else:
+                 return item[2]
+         if col == 2:
+@@ -290,7 +291,7 @@
+         self.close = wxButton(self, -1, "Close")
+         splitter = wxSplitterWindow(self,-1,style=wxNO_3D|wxSP_3DSASH)
+         self.tree = DirTreeCtrl(splitter, -1)
+-        self.listctrl = FileListCtrl(splitter,-1)
++        self.listctrl = FileListCtrl(splitter,-1,frame)
+ 
+         sizerlowh = wxBoxSizer(wxHORIZONTAL)
+         sizerlowh.Add(self.gauge,0,wxEXPAND)

@@ -1,0 +1,244 @@
+diff -rNu3 slsk-tmp1/pysoulseek/config.py slsk-tmp2/pysoulseek/config.py
+--- slsk-tmp1/pysoulseek/config.py	2003-07-11 21:53:46.000000000 +0200
++++ slsk-tmp2/pysoulseek/config.py	2003-07-11 21:53:46.000000000 +0200
+@@ -36,14 +36,13 @@
+ 	"transfers":{"downloaddir":None,"sharedownloaddir":1,"shared":None, \
+ 	"preferfriends":0, "useupslots":0, "uploadslots":2, "incompletedir":"", \
+ 	"uploadbandwidth":100,"uselimit":0,"uploadlimit":100,"limitby":1, \
+-	"afterfinish":"", \
+-	"afterfolder":"", \
++	"afterfinish":"", "afterfolder":"", \
+ 	"usecustomban":0,"customban":"don't bother to retry", "queuelimit":100,\
+ 	"downloads":[],"sharedfiles":{},"sharedfilesstreams":{}, \
+ 	"wordindex":{},"fileindex":{},"sharedmtimes":{},"rescanonstartup":0}, \
+ 	"userinfo":{"descr":"''","pic":""},"logging": \
+ 	{"logsdir":os.path.expanduser("~"),"privatechat":0,"chatrooms":0}, \
+-	"searches":{"maxresults":50,"re_filter":0}, \
++	"searches":{"maxresults":50,"re_filter":0,"history":[]}, \
+  	"ui":{"chatme":"FOREST GREEN", "chatremote":"","chatlocal":"BLUE", \
+  	"chathilite":"", "search":"","searchq":"GREY", "decimalsep":","}}
+ 
+diff -rNu3 slsk-tmp1/pysoulseek/pysoulseek.py slsk-tmp2/pysoulseek/pysoulseek.py
+--- slsk-tmp1/pysoulseek/pysoulseek.py	2003-07-11 21:53:46.000000000 +0200
++++ slsk-tmp2/pysoulseek/pysoulseek.py	2003-07-11 21:53:46.000000000 +0200
+@@ -14,7 +14,6 @@
+ from config import *
+ import threading
+ import string
+-import time
+ 
+ class PeerConnection:
+     """
+@@ -86,7 +85,6 @@
+ 	self.translatepunctuation = string.maketrans(string.punctuation,string.join([' ' for i in string.punctuation],''))
+ 
+         self.events = {slskmessages.ConnectError:self.ConnectError,
+-                       slskmessages.ServerPing:self.Msg83,
+ 		       slskmessages.IncPort:self.IncPort,
+ 		       slskmessages.ServerConn:self.ServerConn,
+ 		       slskmessages.ConnClose:self.ConnClose,
+@@ -333,7 +331,7 @@
+ 
+     def ServerConn(self, msg):
+ 	self.setStatus("Connected to server %s:%s, logging in..." %(msg.addr[0],msg.addr[1]))
+-	time.sleep(5)
++	time.sleep(1)
+ 	self.serverconn = msg.conn
+ 	self.servertimeout = -1
+ 	self.users = {}
+diff -rNu3 slsk-tmp1/pysoulseek/transfers.py slsk-tmp2/pysoulseek/transfers.py
+--- slsk-tmp1/pysoulseek/transfers.py	2003-07-11 21:53:46.000000000 +0200
++++ slsk-tmp2/pysoulseek/transfers.py	2003-07-11 21:53:46.000000000 +0200
+@@ -559,7 +559,7 @@
+ 				needupdate = 0
+ 			    i.status = locale.format("%s",i.currentbytes,1)
+ 			else:
+-			    msg.file.close()
++		            msg.file.close()
+ 			    basename = string.split(i.filename,'\\')[-1]
+ 			    downloaddir = self.eventprocessor.config.sections["transfers"]["downloaddir"]
+ 			    if i.path and i.path[0] == '/':
+diff -rNu3 slsk-tmp1/pysoulseek/utils.py slsk-tmp2/pysoulseek/utils.py
+--- slsk-tmp1/pysoulseek/utils.py	2003-07-11 21:53:46.000000000 +0200
++++ slsk-tmp2/pysoulseek/utils.py	2003-07-11 21:53:46.000000000 +0200
+@@ -9,7 +9,7 @@
+ import os,dircache
+ import mp3
+ 
+-version = "1.2.2-hyriand-8pre2"
++version = "1.2.2-hyriand-8"
+ 
+ def getServerList(url):
+         """ Parse server text file from http://www.slsk.org and 
+diff -rNu3 slsk-tmp1/pysoulseek/wxgui/frame.py slsk-tmp2/pysoulseek/wxgui/frame.py
+--- slsk-tmp1/pysoulseek/wxgui/frame.py	2003-07-11 21:53:46.000000000 +0200
++++ slsk-tmp2/pysoulseek/wxgui/frame.py	2003-07-11 21:53:46.000000000 +0200
+@@ -422,7 +422,7 @@
+ 	self.mainmenu.Enable(self.awayID,1)
+         chatrooms.roomsctrl.SetGreeting(msg.banner)
+         
+-        self.pingtimer.Start(1000)
++        self.pingtimer.Start(30*1000)
+         
+ 	return privatechat,chatrooms,userinfo,userbrowse,searchw,downloads,uploads, userlistpanel
+ 
+diff -rNu3 slsk-tmp1/pysoulseek/wxgui/search.py slsk-tmp2/pysoulseek/wxgui/search.py
+--- slsk-tmp1/pysoulseek/wxgui/search.py	2003-07-11 21:53:46.000000000 +0200
++++ slsk-tmp2/pysoulseek/wxgui/search.py	2003-07-11 21:53:46.000000000 +0200
+@@ -36,7 +36,7 @@
+ 	self.onupdate = onupdate
+ 	self.frame = frame
+ 	self.context = wxRadioBox(self, -1, "", choices = ["Global","Buddies","Joined rooms"], style = wxRA_SPECIFY_COLS | wxNO_BORDER)
+-        self.search =  wxTextCtrl(self,-1, style = wxTE_PROCESS_ENTER)
++        self.search =  wxComboBox(self,-1, choices=[""]+self.frame.np.config.sections["searches"]["history"])
+         self.searchbutton = wxButton(self, -1, "Search")
+         self.resultsnb = notebook.IconNotebook(self, -1, style = wxCLIP_CHILDREN)
+         sizerh = wxBoxSizer(wxHORIZONTAL)
+@@ -88,14 +88,27 @@
+     def OnSearch(self, event):
+         """ Process search request"""
+ 	context = self.context.GetSelection()
+-	text = self.frame.np.encode(self.search.GetLineText(0))
++	text = self.frame.np.encode(self.search.GetValue())
++	if not text.strip():
++	    return
++	history = self.frame.np.config.sections["searches"]["history"]
++	if text in history:
++	    history.remove(text)
++	elif len(history) > 9:
++	   del history[-1]
++	history.insert(0, text)
++        self.frame.np.config.writeConfig()
++        self.search.Clear()
++        self.search.Append("")
++        for item in history:
++            self.search.Append(item)
+ 	if context == 0:
+ 	    self.DoGlobalSearch(text)
+ 	elif context == 1:
+ 	    self.DoBuddySearch(text)
+ 	elif context == 2:
+ 	    self.DoRoomsSearch(text)
+-        self.search.Clear()
++        self.search.SetValue("")
+ 
+     def CreateTab(self, text, auto, title = None):
+ 	requestid = wxNewId()
+@@ -150,6 +163,7 @@
+     def MakeSearchTab(self, requestid, canRemember = True):
+         """ Create a result window, which is a notebook tab. """
+         panel = wxPanel(self.resultsnb, -1)
++        panel.filters = wxCheckBox(panel, -1, label = "Enable filters")
+         panel.filterin =  wxTextCtrl(panel, -1, value = "", size = wxSize(55,20), style = wxTE_PROCESS_ENTER)
+         panel.filterout =  wxTextCtrl(panel, -1, value = "", size = wxSize(55,20), style = wxTE_PROCESS_ENTER)
+         panel.filtersize =  wxTextCtrl(panel, -1, value = "", size = wxSize(55,20), style = wxTE_PROCESS_ENTER)
+@@ -158,38 +172,45 @@
+         close = wxButton(panel, -1, "Close")
+ 	closeignore = wxButton(panel, -1, "Close and ignore")
+ 	panel.rememberctrl = wxCheckBox(panel, -1, label = "Remember")
+-        list = SearchList(panel, -1, self.processrequest, self.privatechat, self.info, self.browse, self.transfers,self.frame)
++        panel.list = SearchList(panel, -1, self.processrequest, self.privatechat, self.info, self.browse, self.transfers,self.frame)
++        panel.sizer = sizerv = wxBoxSizer(wxVERTICAL)
+         sizerh = wxBoxSizer(wxHORIZONTAL)
++        sizerh.Add(panel.filters)
++        sizerh.Add(60,10,1,wxEXPAND)
++	sizerh.Add(closeignore)
++        sizerh.Add(close)
++	sizerh.Add(panel.rememberctrl)
++        sizerv.Add(sizerh, 0, wxEXPAND)
++
++        panel.filtersizer = sizerh = wxBoxSizer(wxHORIZONTAL)
+         sizerh.Add(wxStaticText(panel, -1, label = " Filter In: "), flag = wxALIGN_CENTER)
+-        sizerh.Add(panel.filterin)
++        sizerh.Add(panel.filterin, 1, wxEXPAND)
+         sizerh.Add(wxStaticText(panel, -1, label = " Filter Out: "), flag = wxALIGN_CENTER)
+-        sizerh.Add(panel.filterout)
++        sizerh.Add(panel.filterout, 1, wxEXPAND)
+         sizerh.Add(wxStaticText(panel, -1, label = " Size: "), flag = wxALIGN_CENTER)
+         sizerh.Add(panel.filtersize)
+         sizerh.Add(wxStaticText(panel, -1, label = " Bitrate: "), flag = wxALIGN_CENTER)
+         sizerh.Add(panel.filterbr)
+         sizerh.Add(panel.filterfree, flag = wxALIGN_CENTER|wxLEFT, border=5)
+-        sizerh.Add(60,10,1,wxEXPAND)
+-	sizerh.Add(closeignore)
+-        sizerh.Add(close)
+-	sizerh.Add(panel.rememberctrl)
+-        sizerv = wxBoxSizer(wxVERTICAL)
+-        sizerv.Add(sizerh,0,wxEXPAND)
+-        sizerv.Add(list,1,wxEXPAND)
++        sizerv.Add(sizerh, 0, wxEXPAND)
++        sizerv.Hide(sizerh)
++
++        sizerv.Add(panel.list,1,wxEXPAND)
+         panel.SetSizer(sizerv)
+         panel.SetAutoLayout(True)
+         EVT_BUTTON(self, close.GetId(), self.OnClose)
+ 	EVT_BUTTON(self, closeignore.GetId(), self.OnCloseIgnore)
+- 	EVT_TEXT_ENTER(self, panel.filterin.GetId(), list.OnRefilter)
+-	EVT_TEXT_ENTER(self, panel.filterout.GetId(), list.OnRefilter)
+-	EVT_TEXT_ENTER(self, panel.filtersize.GetId(), list.OnRefilter)
+-	EVT_TEXT_ENTER(self, panel.filterbr.GetId(), list.OnRefilter)
+-	EVT_CHECKBOX(self, panel.filterfree.GetId(), list.OnRefilter)
++ 	EVT_TEXT_ENTER(self, panel.filterin.GetId(), panel.list.OnRefilter)
++	EVT_TEXT_ENTER(self, panel.filterout.GetId(), panel.list.OnRefilter)
++	EVT_TEXT_ENTER(self, panel.filtersize.GetId(), panel.list.OnRefilter)
++	EVT_TEXT_ENTER(self, panel.filterbr.GetId(), panel.list.OnRefilter)
++	EVT_CHECKBOX(self, panel.filterfree.GetId(), panel.list.OnRefilter)
+         EVT_CHECKBOX(self, panel.rememberctrl.GetId(), self.OnRememberCheckClick)
++        EVT_CHECKBOX(self, panel.filters.GetId(), self.OnFiltersEnable)
+         if not canRemember:
+            panel.rememberctrl.Enable(0)
+ 
+-        return panel,list
++        return panel,panel.list
+ 
+     def Close(self, ignore):
+         """ Close the search results window."""
+@@ -228,6 +249,16 @@
+ 	     self.frame.np.config.writeConfig()
+ 	     self.searches[id][2] = value
+ 
++    def OnFiltersEnable(self, event):
++    	value = event.GetEventObject().GetValue()
++    	panel = event.GetEventObject().GetParent()
++    	if value:
++    	    panel.sizer.Show(panel.filtersizer)
++    	else:
++	    panel.sizer.Hide(panel.filtersizer)
++    	panel.sizer.Layout()
++    	panel.list.refilter()
++    	
+ class FakeRe:
+     def __init__(self, phrase):
+         self.words = phrase.split(" ")
+@@ -395,6 +426,9 @@
+         return False
+ 
+     def getFilters(self):
++        if not self.parent.filters.GetValue():
++            return None
++        
+         if self.frame.np.config.sections["searches"]["re_filter"]:
+             Searcher = re.compile
+         else:
+@@ -470,7 +504,7 @@
+ 	    else:
+ 		immdownload = ""
+             self.results.append([len(self.results)+1,name,user,size,msg.ulspeed,msg.inqueue,immdownload,bitrate,length,dir,br])
+-            if self.checkFilter(filters, name, size, br, immdownload):
++            if filters is None or self.checkFilter(filters, name, size, br, immdownload):
+                 self.results_visible.append([len(self.results),name,user,size,msg.ulspeed,msg.inqueue,immdownload,bitrate,length,dir,br])
+                 results += 1
+ 	if results and self.sortcol != -1:
+@@ -500,7 +534,10 @@
+ 
+     def refilter(self):
+         filters = self.getFilters()
+-        self.results_visible = [i for i in self.results if self.checkFilter(filters, i[1], i[3], i[10], i[6])]
++        if filters is None:
++        	self.results_visible = self.results[:]
++        else:
++	        self.results_visible = [i for i in self.results if self.checkFilter(filters, i[1], i[3], i[10], i[6])]
+         self.SetItemCount(len(self.results_visible))
+ 
+     def OnRefilter(self, event):

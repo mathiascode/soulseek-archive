@@ -1,0 +1,170 @@
+diff -rNu3 slsk-tmp1/pysoulseek/config.py slsk-tmp2/pysoulseek/config.py
+--- slsk-tmp1/pysoulseek/config.py	2003-05-28 20:15:36.000000000 +0200
++++ slsk-tmp2/pysoulseek/config.py	2003-05-28 20:15:36.000000000 +0200
+@@ -29,7 +29,7 @@
+ 	self.parser = ConfigParser.ConfigParser()
+ 	self.parser.read([self.filename])
+         self.sections = {"server":{"server":('mail.slsk.org', 2240), \
+-	"login":None,"passw":None, \
++	"login":None,"passw":None,"firewalled":1, \
+ 	"autosearch":[], "autoreply": "", \
+ 	"portrange": (2234,2239), "enc":"utf-8","userlist":[], \
+ 	"banlist":[], "ignorelist":[],"autojoin":["pyslsk"],"autoaway":15}, \
+diff -rNu3 slsk-tmp1/pysoulseek/pysoulseek.py slsk-tmp2/pysoulseek/pysoulseek.py
+--- slsk-tmp1/pysoulseek/pysoulseek.py	2003-05-28 20:15:36.000000000 +0200
++++ slsk-tmp2/pysoulseek/pysoulseek.py	2003-05-28 20:15:36.000000000 +0200
+@@ -186,6 +186,7 @@
+             else:
+                 type = 'P'
+             init = slskmessages.PeerInit(None,self.config.sections["server"]["login"],type,0)
++            firewalled = self.config.sections["server"]["firewalled"]
+ 	    addr = None
+             behindfw = None
+ 	    token = None
+@@ -194,11 +195,14 @@
+                 behindfw = self.users[user].behindfw
+             elif address is not None:
+                 addr = address
+-            if addr is None:
+-                self.queue.put(slskmessages.GetPeerAddress(user))
+-            elif behindfw is None:
+-                self.queue.put(slskmessages.OutConn(None,addr))
+-            else:
++            if firewalled:
++                if addr is None:
++                    self.queue.put(slskmessages.GetPeerAddress(user))
++                elif behindfw is None:
++                    self.queue.put(slskmessages.OutConn(None,addr))
++                else:
++                    firewalled = 0
++            if not firewalled:
+                 token = newId()
+                 self.queue.put(slskmessages.ConnectToPeer(token,user,type))
+ 	    conn = PeerConnection(addr = addr, username = user, msgs = [message], token = token, init = init)
+diff -rNu3 slsk-tmp1/pysoulseek/utils.py slsk-tmp2/pysoulseek/utils.py
+--- slsk-tmp1/pysoulseek/utils.py	2003-05-28 20:15:36.000000000 +0200
++++ slsk-tmp2/pysoulseek/utils.py	2003-05-28 20:15:36.000000000 +0200
+@@ -9,7 +9,7 @@
+ import os,dircache
+ import mp3
+ 
+-version = "1.2.0-hyriand-3.1"
++version = "1.2.0-hyriand-4"
+ 
+ def getServerList(url):
+         """ Parse server text file from http://www.slsk.org and 
+diff -rNu3 slsk-tmp1/pysoulseek/wxgui/configwindow.py slsk-tmp2/pysoulseek/wxgui/configwindow.py
+--- slsk-tmp1/pysoulseek/wxgui/configwindow.py	2003-05-28 20:15:36.000000000 +0200
++++ slsk-tmp2/pysoulseek/wxgui/configwindow.py	2003-05-28 20:15:36.000000000 +0200
+@@ -183,6 +183,7 @@
+         self.firstport = wxTextCtrl(self, -1, size=wxSize(50,25))
+         self.lastport = wxTextCtrl(self, -1, size=wxSize(50,25))
+         self.autoreply = wxTextCtrl(self, -1)
++        self.directconn = wxCheckBox(self, -1, "I can receive direct connections")
+ 
+         hostsizer = wxBoxSizer(wxHORIZONTAL)
+         hostsizer.Add(self.serverctrl)
+@@ -215,6 +216,7 @@
+         awaysizer.Add(wxStaticText(self, -1, " minutes of inactivity"),flag=wxALIGN_CENTER)
+         serversizer.Add(awaysizer,flag=wxTOP|wxLEFT, border = 10)
+ 	serversizer.Add(autoreplysizer,flag=wxTOP|wxLEFT|wxRIGHT|wxEXPAND, border = 10)
++	serversizer.Add(self.directconn,flag=wxTOP|wxLEFT, border = 10)
+ 
+ 	self.SetSizer(serversizer)
+ 	self.SetAutoLayout(True)
+@@ -595,6 +597,8 @@
+ 	    self.serverpanel.autoaway.SetValue(str(server["autoaway"]))
+ 	if server["autoreply"] is not None:
+ 	    self.serverpanel.autoreply.SetValue(server["autoreply"])
++	if server["firewalled"] is not None:
++	    self.serverpanel.directconn.SetValue(not server["firewalled"])
+ 	if transfers["incompletedir"] is not None:
+ 	    self.transferspanel.incompletedirctrl.SetValue(transfers["incompletedir"])
+ 	if transfers["downloaddir"] is not None:
+@@ -733,6 +737,7 @@
+ 		"ignorelist":ignorelist, \
+ 		"portrange":portrange, \
+ 		"autoaway":autoaway, \
++		"firewalled":not self.serverpanel.directconn.GetValue(), \
+ 		"autoreply":encode(self.serverpanel.autoreply.GetValue()), \
+ 		"enc":encode(self.serverpanel.enc.GetValue())},"transfers":{\
+ 		"incompletedir":encode(self.transferspanel.incompletedirctrl.GetValue()), \
+diff -rNu3 slsk-tmp1/pysoulseek/wxgui/search.py slsk-tmp2/pysoulseek/wxgui/search.py
+--- slsk-tmp1/pysoulseek/wxgui/search.py	2003-05-28 20:15:36.000000000 +0200
++++ slsk-tmp2/pysoulseek/wxgui/search.py	2003-05-28 20:15:36.000000000 +0200
+@@ -356,7 +356,7 @@
+             dir = downloadchoose.GetPath()
+             if dir is None:
+                 return
+-            self.OnDownload(event, dir)
++            self.OnDownload(event, self.frame.np.encode(dir))
+ 
+     def OnDownloadFolder(self,event):
+         self.processrequest(self.selecteduser, slskmessages.FolderContentsRequest(None,self.results_visible[self.id][9]))
+diff -rNu3 slsk-tmp1/pysoulseek/wxgui/userinfobrowse.py slsk-tmp2/pysoulseek/wxgui/userinfobrowse.py
+--- slsk-tmp1/pysoulseek/wxgui/userinfobrowse.py	2003-05-28 20:15:36.000000000 +0200
++++ slsk-tmp2/pysoulseek/wxgui/userinfobrowse.py	2003-05-28 20:15:36.000000000 +0200
+@@ -19,6 +19,7 @@
+ import locale
+ from pysoulseek.utils import Humanize
+ import string
++import os
+ 
+ class UserNotebook(notebook.IconNotebook):
+     """ This is a notebook with user's information. Used to show either
+@@ -345,9 +346,15 @@
+         downloaddirID=wxNewId()
+         self.treemenu.Append(downloaddirID, 'Download Directory')
+         EVT_MENU(self.tree,downloaddirID, self.OnDownloadDir)
++        downloaddirtoID=wxNewId()
++        self.treemenu.Append(downloaddirtoID, "Download Directory to...")
++        EVT_MENU(self.tree,downloaddirtoID, self.OnDownloadDirTo)
+         recdownloaddirID=wxNewId()
+         self.treemenu.Append(recdownloaddirID, 'Recursively Download Dir')
+         EVT_MENU(self.tree,recdownloaddirID, self.OnRecDownloadDir)
++        recdownloaddirtoID=wxNewId()
++        self.treemenu.Append(recdownloaddirtoID, 'Recursively Download Dir to...')
++        EVT_MENU(self.tree,recdownloaddirtoID, self.OnRecDownloadDirTo)
+         downloadfileID=wxNewId()
+         self.listmenu.Append(downloadfileID, 'Download File(s)')
+         EVT_MENU(self.listctrl,downloadfileID, self.OnDownloadFile)
+@@ -443,13 +450,23 @@
+         self.curtreeitem = event.GetItem()
+         self.listctrl.SetFileList(self.tree.GetPyData(self.curtreeitem))
+ 
+-    def OnDownloadDir(self,event):
++    def OnDownloadDir(self,event, prefix=""):
+         """ Get every file in the directory """
+         import string
+-        dir = string.split(self.listctrl.dir,'\\')[-1]
++        dir = os.path.join(prefix, string.split(self.listctrl.dir,'\\')[-1])
+         for i in self.listctrl.list:
+             self.transfers.getFile(self.user, self.listctrl.dir+'\\'+i[1], dir)
+ 
++    def OnDownloadDirTo(self,event):
++        """ Ask for destination dir and get directory """
++        downloadchoose = wxDirDialog(self)
++        val = downloadchoose.ShowModal()
++        if val == wxID_OK:
++            dir = downloadchoose.GetPath()
++            if dir is None:
++                return
++            self.OnDownloadDir(event, self.frame.np.encode(dir))
++
+     def OnDownloadFile(self,event, absolutedir=""):
+         """ Get selected files """
+ 	item = -1
+@@ -547,3 +564,13 @@
+             while i.IsOk():
+                 self.RecDownloadDir(i, ldir)
+                 i, cookie = self.tree.GetNextChild(item, cookie)
++
++    def OnRecDownloadDirTo(self,event):
++        """ Ask for destination dir and get directory """
++        downloadchoose = wxDirDialog(self)
++        val = downloadchoose.ShowModal()
++        if val == wxID_OK:
++            dir = downloadchoose.GetPath()
++            if dir is None:
++                return
++            self.RecDownloadDir(self.curtreeitem, self.frame.np.encode(dir))

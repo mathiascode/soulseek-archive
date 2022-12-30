@@ -1,0 +1,378 @@
+diff -rNu3 slsk-tmp1/pysoulseek/config.py slsk-tmp2/pysoulseek/config.py
+--- slsk-tmp1/pysoulseek/config.py	2003-03-27 13:53:50.000000000 +0100
++++ slsk-tmp2/pysoulseek/config.py	2003-03-27 13:53:50.000000000 +0100
+@@ -29,9 +29,10 @@
+ 	self.parser.read([self.filename])
+         self.sections = {"server":{"server":None,"login":None,"passw":None, \
+ 	"portrange": (2234,2239), \
+-	"enc":"utf-8","userlist":[],"banlist":[],"autojoin":["pyslsk"]}, \
++	"enc":"utf-8","userlist":[],"banlist":[],"ignorelist":[],"autojoin":["pyslsk"], \
++	"autosearch":[],"ignorelist":[]}, \
+ 	"transfers":{"downloaddir":None,"sharedownloaddir":1,"shared":None, \
+-	"uploadbandwidth":100,"uselimit":0,"uploadlimit":100,"limitby":1,
++	"uploadbandwidth":100,"uselimit":0,"uploadlimit":100,"limitby":1, \
+ 	"preferfriends":0, "useupslots":0, "uploadslots":2, \
+ 	"usecustomban":0,"customban":"don't bother to retry", \
+ 	"downloads":[],"sharedfiles":{},"sharedfilesstreams":{}, \
+@@ -70,7 +71,7 @@
+ 		    print "Bogus config section:",i
+ 		elif j not in self.sections[i].keys():
+ 		    print "Bogus config option",j,"section",i
+-		elif j in ['server','shared','uploadbandwidth','uselimit',"usecustomban",'uploadlimit','limitby','downloads','sharedfiles','sharedownloaddir','userlist','banlist','autojoin','sharedfilesstreams','privatechat','chatrooms','maxresults','rescanonstartup','portrange','preferfriends','useupslots','uploadslots']:
++		elif j in ['server','shared','uploadbandwidth','uselimit',"usecustomban",'uploadlimit','limitby','downloads','sharedfiles','sharedownloaddir','userlist','banlist','ignorelist','autojoin','sharedfilesstreams','privatechat','chatrooms','maxresults','rescanonstartup','portrange','preferfriends','useupslots','uploadslots','autosearch','ignorelist']:
+ 		    try:
+ 		        self.sections[i][j] = eval(val)
+ 		    except:
+diff -rNu3 slsk-tmp1/pysoulseek/wxgui/about.py slsk-tmp2/pysoulseek/wxgui/about.py
+--- slsk-tmp1/pysoulseek/wxgui/about.py	2003-03-27 13:53:50.000000000 +0100
++++ slsk-tmp2/pysoulseek/wxgui/about.py	2003-03-27 13:53:50.000000000 +0100
+@@ -7,7 +7,7 @@
+ from wxPython.wx import *
+ import images
+ 
+-version = "1.0.4-hyriand-12.8"
++version = "1.0.4-hyriand-13"
+ 
+ class About(wxDialog):
+     def __init__(self, parent, id, title):
+@@ -64,6 +64,8 @@
+ 	        "", "",
+ 	        "/ban user", "Add user 'user' to your ban list",
+ 	        "/unban user", "Remove user 'user' from your ban list",
++	        "/ignore user", "Add user 'user' to your ignore list",
++	        "/unignore user", "Remove user 'user' from your ignore list",
+ 	        "", "",
+ 	        "/msg user message", "Send 'message' to 'user'",
+ 	        "/pm user", "Open private to user 'user'",
+@@ -90,6 +92,8 @@
+ 	        "", "",
+ 	        "/ban [user]", "Add user 'user' to your ban list",
+ 	        "/unban [user]", "Remove user 'user' from your ban list",
++	        "/ignore [user]", "Add user 'user' to your ignore list",
++	        "/unignore [user]", "Remove user 'user' from your ignore list",
+ 	        "", "",
+ 	        "/search /s query", "Start a new search for 'query'",
+ 		"/rsearch /rs query", "Search the joined roms for 'query'",
+diff -rNu3 slsk-tmp1/pysoulseek/wxgui/chat.py slsk-tmp2/pysoulseek/wxgui/chat.py
+--- slsk-tmp1/pysoulseek/wxgui/chat.py	2003-03-27 13:53:50.000000000 +0100
++++ slsk-tmp2/pysoulseek/wxgui/chat.py	2003-03-27 13:53:50.000000000 +0100
+@@ -393,6 +393,9 @@
+         banuserID=wxNewId()
+ 	self.menu.Append(banuserID, "Ban this user")
+ 	EVT_MENU(self,banuserID, self.OnBanUser)
++	ignoreuserID=wxNewId()
++	self.menu.Append(ignoreuserID, "Ignore this user")
++	EVT_MENU(self,ignoreuserID, self.OnIgnoreUser)
+ 
+ 
+         EVT_RIGHT_UP(self,self.OnRightUp)
+@@ -425,6 +428,8 @@
+     def OnBanUser(self, event):
+     	self.parent.frame.BanUser(self.focuseduser)
+ 
++    def OnIgnoreUser(self, event):
++	self.parent.frame.IgnoreUser(self.focuseduser)
+ 
+     def OnGetItemText(self, item, col):
+         username =  self.parent.userslist[item]
+@@ -587,6 +592,12 @@
+         elif cmd == "/unban":
+             if rest:
+                 self.frame.UnbanUser(rest)
++	elif cmd == "/ignore":
++	    if rest:
++		self.frame.IgnoreUser(rest)
++	elif cmd == "/unignore":
++	    if rest:
++		self.frame.UnignoreUser(rest)
+         elif cmd == "/ip":
+             if rest:
+                 self.queue.put(slskmessages.GetPeerAddress(rest))
+@@ -676,6 +687,8 @@
+ 
+ 
+     def SayChatRoom(self, msg, text):
++	if msg.user in self.frame.np.config.sections["server"]["ignorelist"]:
++	    return
+         self.room = msg.room
+ 	highlight = False
+ 
+@@ -745,6 +758,8 @@
+     def ShowMessage(self, msg, text):
+         """ Processes MessageUser message from the server. """
+ 	import time
++	if msg.user in self.np.config.sections["server"]["ignorelist"]:
++	    return
+         if not self.users.has_key(msg.user):
+             self.users[msg.user] = PrivateChatWindow(self, -1, msg.user)
+             self.AddPage(self.users[msg.user], msg.user)
+@@ -828,6 +843,15 @@
+ 
+         if self.logctrl.GetValue() == 1:
+             self.OnLogCheckClick(None)
++	    try:
++	        logfile = open(os.path.join(self.parent.np.config.sections["logging"]["logsdir"], string.replace(self.user, os.sep, "-") + ".log"), 'r', 0)
++	    except:
++		return
++	    lines = logfile.readlines()
++	    for i in lines[-15:]:
++		self.AddText(i, 'brown')
++	    self.AddText('----------------------------------------------------\n', 'purple')
++	    
+ 
+     def AddText(self,text, color = None):
+         """ Rather obvious really """
+@@ -905,7 +929,11 @@
+             self.parent.np.frame.BanUser(rest)
+         elif cmd == "/unban":
+             self.parent.np.frame.UnbanUser(rest)
+-	elif cmd == "/ip":
++	elif cmd == "/ignore":
++	    self.parent.np.frame.IgnoreUser(rest)
++	elif cmd == "/unignore":
++	    self.parent.np.frame.UnignoreUser(rest)
++        elif cmd == "/ip":
+             self.parent.queue.put(slskmessages.GetPeerAddress(rest))
+         elif cmd in ("/search", "/s"):
+             if truerest:
+diff -rNu3 slsk-tmp1/pysoulseek/wxgui/configwindow.py slsk-tmp2/pysoulseek/wxgui/configwindow.py
+--- slsk-tmp1/pysoulseek/wxgui/configwindow.py	2003-03-27 13:53:50.000000000 +0100
++++ slsk-tmp2/pysoulseek/wxgui/configwindow.py	2003-03-27 13:53:50.000000000 +0100
+@@ -350,7 +350,12 @@
+         resultssizer.Add(wxStaticText(miscpanel, -1, " results per search request"),flag=wxALIGN_CENTER)
+ 	miscsizer.Add(resultssizer,flag=wxTOP|wxLEFT, border = 10)
+ 	self.banlist = UserList(miscpanel, -1, wxSize(150,0), "Banned users")
+-	miscsizer.Add(self.banlist, 1, flag=wxALIGN_CENTER|wxTOP, border=15)
++
++	self.ignorelist = UserList(miscpanel, -1, wxSize(150,0), "Ignored users")
++	badpeoplesizer = wxBoxSizer(wxHORIZONTAL)
++	badpeoplesizer.Add(self.banlist, 1, flag=wxALIGN_CENTER|wxTOP|wxEXPAND, border=15)
++	badpeoplesizer.Add(self.ignorelist, 1, flag=wxALIGN_CENTER|wxTOP|wxEXPAND, border=15)
++	miscsizer.Add(badpeoplesizer, 1, flag=wxALIGN_CENTER|wxTOP|wxEXPAND, border=5 )
+ 	custombansizer = wxBoxSizer(wxHORIZONTAL)
+ 	self.usecustomban = wxCheckBox(miscpanel, -1, "Use custom ban message:")
+ 	custombansizer.Add(self.usecustomban)
+@@ -484,6 +489,8 @@
+ 	    self.enc.SetValue(server["enc"])
+ 	if server["banlist"] is not None:
+ 	    self.banlist.setList(server["banlist"])
++	if server["ignorelist"] is not None:
++	    self.ignorelist.setList(server["ignorelist"])
+ 	if server["portrange"] is not None:
+ 	    self.firstport.SetValue(str(server["portrange"][0]))
+ 	    self.lastport.SetValue(str(server["portrange"][1]))
+@@ -610,10 +617,14 @@
+ 	banlist = []
+ 	for i in self.banlist.getList():
+ 	    banlist.append(self.encode(i))
++	ignorelist = []
++	for i in self.ignorelist.getList():
++	    ignorelist.append(self.encode(i))
+ 	return {"server":{"server":server, \
+ 		"login":self.encode(self.loginctrl.GetValue()), \
+ 		"passw":self.encode(self.passwctrl.GetValue()), \
+ 		"banlist":banlist, \
++		"ignorelist":ignorelist, \
+ 		"portrange":portrange, \
+ 		"enc":self.encode(self.enc.GetValue())},"transfers":{\
+ 		"downloaddir":self.encode(self.downloaddirctrl.GetValue()), \
+diff -rNu3 slsk-tmp1/pysoulseek/wxgui/frame.py slsk-tmp2/pysoulseek/wxgui/frame.py
+--- slsk-tmp1/pysoulseek/wxgui/frame.py	2003-03-27 13:53:50.000000000 +0100
++++ slsk-tmp2/pysoulseek/wxgui/frame.py	2003-03-27 13:53:50.000000000 +0100
+@@ -382,7 +382,18 @@
+ 	    self.np.config.sections["server"]["banlist"].remove(user)
+             self.np.config.setConfig({"server":{"banlist":self.np.config.sections["server"]["banlist"]}})
+ 	    self.np.config.writeConfig()
+-	    
++
++    def IgnoreUser(self,user):
++	 if user not in self.np.config.sections["server"]["ignorelist"]:
++	     self.np.config.sections["server"]["ignorelist"].append(user)
++	     self.np.config.setConfig({"server":{"ignorelist":self.np.config.sections["server"]["ignorelist"]}})
++	     self.np.config.writeConfig()
++    
++    def UnignoreUser(self,user):
++	 if user in self.np.config.sections["server"]["ignorelist"]:
++	     self.np.config.sections["server"]["ignorelist"].remove(user)
++	     self.np.config.setConfig({"server":{"ignorelist":self.np.config.sections["server"]["ignorelist"]}})
++	     self.np.config.writeConfig()
+ 
+     def InitUserList(self,list):
+ 	list.sort()
+diff -rNu3 slsk-tmp1/pysoulseek/wxgui/search.py slsk-tmp2/pysoulseek/wxgui/search.py
+--- slsk-tmp1/pysoulseek/wxgui/search.py	2003-03-27 13:53:50.000000000 +0100
++++ slsk-tmp2/pysoulseek/wxgui/search.py	2003-03-27 13:53:50.000000000 +0100
+@@ -36,6 +36,8 @@
+         self.search =  wxTextCtrl(self,-1, style = wxTE_PROCESS_ENTER)
+         self.searchbutton = wxButton(self, -1, "Search")
+         self.resultsnb = notebook.IconNotebook(self, -1, style = wxCLIP_CHILDREN)
++        timerid = wxNewId()
++        self.timer = wxTimer(self, timerid)
+         sizerh = wxBoxSizer(wxHORIZONTAL)
+         sizerh.Add(self.search,1,wxALIGN_CENTER)
+         sizerh.Add(self.searchbutton,0,wxALIGN_CENTER)
+@@ -49,8 +51,23 @@
+ 
+         EVT_BUTTON(self, self.searchbutton.GetId(), self.OnSearch)
+         EVT_TEXT_ENTER(self,self.search.GetId(), self.OnSearch)
++        EVT_TIMER(self, timerid, self.OnTimer)
+ 
+         self.searches = {}
++	self.AutoSearch()
++        self.timer.Start(60*60*1000)
++	
++    def AutoSearch(self):
++        for i in self.frame.np.config.sections["server"]["autosearch"]:
++            for j in self.searches.keys():
++                if self.searches[j][1] == i and self.searches[j][2]:
++                    self.queue.put(slskmessages.FileSearch(j,i))
++                    break
++            else:
++	        self.DoGlobalSearch(i, True)
++
++    def OnTimer(self, event):
++        self.AutoSearch()
+ 
+     def OnSearch(self, event):
+         """ Process search request"""
+@@ -64,10 +81,13 @@
+ 	    self.DoRoomsSearch(text)
+         self.search.Clear()
+ 
+-    def DoGlobalSearch(self, text):
++    def DoGlobalSearch(self, text, auto=False):
+         requestid = wxNewId()
+-	tab, list = self.MakeSearchTab()
+-        self.searches[requestid] = (list,text)
++	tab, list = self.MakeSearchTab(requestid)
++	tab.text = text
++	if auto:
++	    tab.rememberctrl.SetValue(1)
++        self.searches[requestid] = [list, text, auto]
+ 	self.resultsnb.AddPage(tab,text)
+         self.queue.put(slskmessages.FileSearch(requestid,text))
+ 
+@@ -88,8 +108,8 @@
+ 
+     def DoPeerSearch(self, text, users, title = ""):
+         requestid = wxNewId()
+-        tab, list = self.MakeSearchTab()
+-        self.searches[requestid] = (list,text)
++        tab, list = self.MakeSearchTab(requestid, False)
++        self.searches[requestid] = [list,text,None]
+ 	self.resultsnb.AddPage(tab,"%s (%s)" %(text,title))
+         for user in users:
+             self.processrequest(user, slskmessages.FileSearchRequest(None,requestid,text))
+@@ -100,24 +120,27 @@
+         if self.searches.has_key(msg.token):
+             if self.searches[msg.token][0] is None:
+                 text = self.searches[msg.token][1]
+-                tab, list = self.MakeSearchTab()
+-                self.searches[msg.token] = (list, text)
++                remember = self.searches[msg.token][2]
++                tab, list = self.MakeSearchTab(msg.token, not remember is None)
++		tab.text = text
++                self.searches[msg.token] = [list, text, remember]
+                 self.resultsnb.AddPage(tab,text)
+-            self.searches[msg.token][0].AddResult(msg, username)
+-	    self.onupdate(self)
+-	    self.resultsnb.OnPageUpdated(self.searches[msg.token][0].parent)
++            if self.searches[msg.token][0].AddResult(msg, username):
++	        self.onupdate(self)
++	        self.resultsnb.OnPageUpdated(self.searches[msg.token][0].parent)
+ 
+-    def MakeSearchTab(self):
++    def MakeSearchTab(self, requestid, canRemeber = True):
+         """ Create a result window, which is a notebook tab. """
+         panel = wxPanel(self.resultsnb, -1)
+-        panel.filterin =  wxTextCtrl(panel, -1, value = "", style = wxTE_PROCESS_ENTER)
+-        panel.filterout =  wxTextCtrl(panel, -1, value = "", style = wxTE_PROCESS_ENTER)
+-        panel.filtersize =  wxTextCtrl(panel, -1, value = "", style = wxTE_PROCESS_ENTER)
++        panel.filterin =  wxTextCtrl(panel, -1, value = "", size = wxSize(55,20), style = wxTE_PROCESS_ENTER)
++        panel.filterout =  wxTextCtrl(panel, -1, value = "", size = wxSize(55,20), style = wxTE_PROCESS_ENTER)
++        panel.filtersize =  wxTextCtrl(panel, -1, value = "", size = wxSize(55,20), style = wxTE_PROCESS_ENTER)
+         panel.filterbr =  wxTextCtrl(panel, -1, value = "", size = wxSize(45,20), style = wxTE_PROCESS_ENTER)
+         panel.filterfree = wxCheckBox(panel, -1, label = "free slot")
+         close = wxButton(panel, -1, "Close")
+ 	closeignore = wxButton(panel, -1, "Close and ignore")
+-        list = SearchList(panel, -1, self.processrequest, self.privatechat, self.info, self.browse, self.transfers,self.frame)
++	panel.rememberctrl = wxCheckBox(panel, -1, label = "Remember")
++        list = SearchList(panel, -1, self.processrequest, self.privatechat, self.info, self.browse, self.transfers,self.frame, self, requestid)
+         sizerh = wxBoxSizer(wxHORIZONTAL)
+         sizerh.Add(wxStaticText(panel, -1, label = " Filter In: "), flag = wxALIGN_CENTER)
+         sizerh.Add(panel.filterin)
+@@ -131,6 +154,7 @@
+         sizerh.Add(60,10,1,wxEXPAND)
+ 	sizerh.Add(closeignore)
+         sizerh.Add(close)
++	sizerh.Add(panel.rememberctrl)
+         sizerv = wxBoxSizer(wxVERTICAL)
+         sizerv.Add(sizerh,0,wxEXPAND)
+         sizerv.Add(list,1,wxEXPAND)
+@@ -143,6 +167,9 @@
+ 	EVT_TEXT_ENTER(self, panel.filtersize.GetId(), list.OnRefilter)
+ 	EVT_TEXT_ENTER(self, panel.filterbr.GetId(), list.OnRefilter)
+ 	EVT_CHECKBOX(self, panel.filterfree.GetId(), list.OnRefilter)
++	EVT_CHECKBOX(self, panel.rememberctrl.GetId(), list.OnRememberCheckClick)
++	if not canRemeber:
++	    panel.rememberctrl.Enable(0)
+         return panel,list
+ 
+     def Close(self, ignore):
+@@ -151,7 +178,11 @@
+         selected = self.resultsnb.GetPage(selectednum)
+         for i in self.searches.keys():
+             if self.searches[i][0] is not None and self.searches[i][0].GetParent() == selected:
+-                self.searches[i] = (None,self.searches[i][1])
++                self.searches[i] = [None,self.searches[i][1], self.searches[i][2]]
++		if self.searches[i][1] in self.frame.np.config.sections["server"]["autosearch"]:
++		    self.frame.np.config.sections["server"]["autosearch"].remove(self.searches[i][1])
++		    self.frame.np.config.setConfig({"server":{"autosearch":self.frame.np.config.sections["server"]["autosearch"]}})
++		    self.frame.np.config.writeConfig()
+ 		if ignore:
+                     del self.searches[i]
+ 
+@@ -168,7 +199,7 @@
+ 
+ class SearchList(sortableListCtrl):
+     """ List of search results."""
+-    def __init__(self, parent, id, processrequest, privatechat, info, browse, transfers,frame,style = wxLC_REPORT|wxLC_VIRTUAL|wxLC_VRULES|wxSUNKEN_BORDER):
++    def __init__(self, parent, id, processrequest, privatechat, info, browse, transfers,frame, search, requestid, style = wxLC_REPORT|wxLC_VIRTUAL|wxLC_VRULES|wxSUNKEN_BORDER):
+         sortableListCtrl.__init__(self,parent,id,style = style)
+         self.InsertColumn(0,"Filename", width=250)
+         self.InsertColumn(1,"User", width = 100)
+@@ -192,7 +223,10 @@
+         self.browse = browse
+         self.transfers = transfers
+ 	self.frame = frame
++	self.search = search
++	self.requestid = requestid
+ 
++        self.foundUsers = []
+         self.results = []
+         self.results_visible = []
+ 
+@@ -332,6 +366,9 @@
+ 
+     def AddResult(self, msg, username):
+         """ Add a result to the list."""
++        if username in self.foundUsers:
++            return 0
++        self.foundUsers.append(username)
+         import string
+         results = 0
+         for i in msg.list:
+@@ -398,3 +435,13 @@
+         else:
+             self.results_visible.sort(lambda y,x: self.cmp(x[col],y[col]))
+ 
++    def OnRememberCheckClick(self, event):
++	""" This is called when the 'Remember' checkbox is clicked """
++	v = self.parent.rememberctrl.GetValue()
++	if v == 1:
++	    self.frame.np.config.sections["server"]["autosearch"].append(self.parent.text)
++        else:
++	    self.frame.np.config.sections["server"]["autosearch"].remove(self.parent.text)
++	self.frame.np.config.setConfig({"server":{"autosearch":self.frame.np.config.sections["server"]["autosearch"]}})
++	self.frame.np.config.writeConfig()
++	self.search.searches[self.requestid][2] = v

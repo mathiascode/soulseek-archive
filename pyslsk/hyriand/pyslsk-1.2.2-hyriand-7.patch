@@ -1,0 +1,1866 @@
+diff -rNu3 pyslsk-1.2.2/pysoulseek/config.py slsk-tmp/pysoulseek/config.py
+--- pyslsk-1.2.2/pysoulseek/config.py	2003-06-17 00:29:42.000000000 +0200
++++ slsk-tmp/pysoulseek/config.py	2003-06-24 02:46:31.000000000 +0200
+@@ -29,23 +29,35 @@
+ 	self.parser = ConfigParser.ConfigParser()
+ 	self.parser.read([self.filename])
+         self.sections = {"server":{"server":('mail.slsk.org', 2240), \
+-	"login":None,"passw":None, \
+-	"autosearch":[], \
++	"login":None,"passw":None,"firewalled":1, \
++	"autosearch":[], "autoreply": "", \
+ 	"portrange": (2234,2239), "enc":"utf-8","userlist":[], \
+ 	"banlist":[], "ignorelist":[],"autojoin":["pyslsk"],"autoaway":15}, \
+ 	"transfers":{"downloaddir":None,"sharedownloaddir":1,"shared":None, \
+-	"uploadbandwidth":100,"uselimit":0,"uploadlimit":100,"limitby":1,
++	"preferfriends":0, "useupslots":0, "uploadslots":2, "incompletedir":"", \
++	"uploadbandwidth":100,"uselimit":0,"uploadlimit":100,"limitby":1, \
++	"afterfinish":"", \
+ 	"usecustomban":0,"customban":"don't bother to retry", "queuelimit":100,\
+ 	"downloads":[],"sharedfiles":{},"sharedfilesstreams":{}, \
+ 	"wordindex":{},"fileindex":{},"sharedmtimes":{},"rescanonstartup":0}, \
+ 	"userinfo":{"descr":"''","pic":""},"logging": \
+ 	{"logsdir":os.path.expanduser("~"),"privatechat":0,"chatrooms":0}, \
+-	"searches":{"maxresults":50}}
++	"searches":{"maxresults":50,"re_filter":0}, \
++ 	"ui":{"chatme":"FOREST GREEN", "chatremote":"","chatlocal":"BLUE", \
++ 	"chathilite":"", "search":"","searchq":"GREY", "decimalsep":","}}
++
++ 	try:
++ 	    f = open(filename+".alias")
++ 	    self.aliases = cPickle.load(f)
++ 	    f.close()
++ 	except:
++ 	    self.aliases = {}
++    
+ 	    
+     def needConfig(self):
+ 	for i in self.sections.keys():
+ 	    for j in self.sections[i].keys():
+-		if self.sections[i][j] is None or self.sections[i][j] == '' and i != "userinfo":
++		if self.sections[i][j] is None or self.sections[i][j] == '' and i not in ("userinfo", "ui") and j not in ("incompletedir", "autoreply", 'afterfinish'):
+ 		    return 1
+ 	return 0
+ 
+@@ -57,7 +69,7 @@
+ 		    print "Bogus config section:",i
+ 		elif j not in self.sections[i].keys():
+ 		    print "Bogus config option",j,"section",i
+-		elif j in ['login','passw','enc','downloaddir','customban','descr','pic','logsdir']:
++		elif j in ['login','passw','enc','downloaddir','customban','descr','pic','logsdir','incompletedir', 'autoreply', 'afterfinish'] or i == "ui":
+ 		    self.sections[i][j] = val
+ 		else:
+ 		    try:
+@@ -136,3 +148,34 @@
+ 	self.sections["transfers"]["fileindex"].sync()
+ 	self.sections["transfers"]["sharedmtimes"].sync()
+ 
++    def writeAliases(self):
++        f = open(self.filename+".alias","w")
++        cPickle.dump(self.aliases, f, 1)
++        f.close()
++
++    def AddAlias(self, rest):
++	if rest:
++	    args = rest.split(" ", 1)
++	    if len(args) == 2:
++	        if args[0] in ("alias", "unalias"):
++	            return "I will not alias that!\n"
++	        self.aliases[args[0]] = args[1]
++	        self.writeAliases()
++	    if self.aliases.has_key(args[0]):
++	        return "Alias %s: %s\n" % (args[0], self.aliases[args[0]])
++	    else:
++	        return "No such alias (%s)\n" % rest
++        else:
++           m = "\nAliases:\n"
++           for i in self.aliases.keys():
++               m = m + "%s: %s\n" % (i, self.aliases[i])
++           return m+"\n"
++
++    def Unalias(self, rest):
++	if rest and self.aliases.has_key(rest):
++	    x = self.aliases[rest]
++	    del self.aliases[rest]
++	    self.writeAliases()
++	    return "Removed alias %s: %s\n" % (rest, x)
++	else:
++	    return "No such alias (%s)\n" % rest
+diff -rNu3 pyslsk-1.2.2/pysoulseek/pysoulseek.py slsk-tmp/pysoulseek/pysoulseek.py
+--- pyslsk-1.2.2/pysoulseek/pysoulseek.py	2003-06-18 00:50:52.000000000 +0200
++++ slsk-tmp/pysoulseek/pysoulseek.py	2003-06-24 02:46:31.000000000 +0200
+@@ -186,6 +186,7 @@
+             else:
+                 type = 'P'
+             init = slskmessages.PeerInit(None,self.config.sections["server"]["login"],type,0)
++            firewalled = self.config.sections["server"]["firewalled"]
+ 	    addr = None
+             behindfw = None
+ 	    token = None
+@@ -194,11 +195,14 @@
+                 behindfw = self.users[user].behindfw
+             elif address is not None:
+                 addr = address
+-            if addr is None:
+-                self.queue.put(slskmessages.GetPeerAddress(user))
+-            elif behindfw is None:
+-                self.queue.put(slskmessages.OutConn(None,addr))
+-            else:
++            if firewalled:
++                if addr is None:
++                    self.queue.put(slskmessages.GetPeerAddress(user))
++                elif behindfw is None:
++                    self.queue.put(slskmessages.OutConn(None,addr))
++                else:
++                    firewalled = 0
++            if not firewalled:
+                 token = newId()
+                 self.queue.put(slskmessages.ConnectToPeer(token,user,type))
+ 	    conn = PeerConnection(addr = addr, username = user, msgs = [message], token = token, init = init)
+@@ -476,6 +480,10 @@
+ 	    self.transfers.GetUserStatus(msg)
+ 	if self.privatechat is not None:
+ 	    self.privatechat.GetUserStatus(msg)
++	if self.userinfo is not None:
++	    self.userinfo.GetUserStatus(msg)
++	if self.userbrowse is not None:
++	    self.userbrowse.GetUserStatus(msg)
+ 	if self.chatrooms is not None:
+             self.chatrooms.roomsctrl.GetUserStatus(msg)
+         else:
+diff -rNu3 pyslsk-1.2.2/pysoulseek/transfers.py slsk-tmp/pysoulseek/transfers.py
+--- pyslsk-1.2.2/pysoulseek/transfers.py	2003-06-14 11:24:59.000000000 +0200
++++ slsk-tmp/pysoulseek/transfers.py	2003-06-24 02:46:31.000000000 +0200
+@@ -389,8 +389,11 @@
+ 
+     def bandwidthLimitReached(self):
+ 	maxbandwidth = self.eventprocessor.config.sections["transfers"]["uploadbandwidth"]
++	maxupslots = self.eventprocessor.config.sections["transfers"]["uploadslots"]
++	useupslots = self.eventprocessor.config.sections["transfers"]["useupslots"]
+ 	bandwidthlist = [i.speed for i in self.uploads if i.conn is not None and i.speed is not None]
+-	return reduce(lambda x, y: x+y, bandwidthlist, 0) > maxbandwidth
++	slotsreached = len(bandwidthlist) >= maxupslots
++	return (reduce(lambda x, y: x+y, bandwidthlist, 0) > maxbandwidth) or (useupslots and slotsreached)
+ 
+     def getFileSize(self,filename):
+ 	try:
+@@ -451,16 +454,22 @@
+ 	request to get the file that was previously queued"""
+ 
+ 	downloaddir = self.eventprocessor.config.sections["transfers"]["downloaddir"]
++	incompletedir = self.eventprocessor.config.sections["transfers"]["incompletedir"]
++
+ 	for i in self.downloads:
+ 	    if msg.req == i.req and i.conn is None and i.size is not None:
+ 		i.conn = msg.conn
+ 		i.req = None
+ 		if i.transfertimer is not None:
+                     i.transfertimer.cancel()
++                if not incompletedir:
++                    if i.path and i.path[0] == '/':
++                        incompletedir = i.path
++                    else:
++                        incompletedir = os.path.join(downloaddir, i.path)
+ 		try:
+-		    folder = os.path.join(downloaddir,i.path)
+-		    if not os.access(folder,os.F_OK):
+-		        os.makedirs(folder)
++		    if not os.access(incompletedir,os.F_OK):
++		        os.makedirs(incompletedir)
+ 		except OSError, (errno, strerror):
+ 		    self.eventprocessor.logMessage("OS error(%s): %s" % (errno, strerror))
+ 		    i.status = "Download directory error"
+@@ -470,9 +479,9 @@
+ 		  try:
+                     # also check for a windows-style incomplete transfer
+ 		    basename = string.split(i.filename,'\\')[-1]
+-                    winfname = os.path.join(downloaddir,i.path,"INCOMPLETE~"+basename)
+-                    pyfname  = os.path.join(downloaddir,i.path,"INCOMPLETE"+basename)
+-		    pynewfname = os.path.join(downloaddir,i.path,"INCOMPLETE"+md5.new(i.filename+i.user).hexdigest()+basename)
++                    winfname = os.path.join(incompletedir,"INCOMPLETE~"+basename)
++                    pyfname  = os.path.join(incompletedir,"INCOMPLETE"+basename)
++		    pynewfname = os.path.join(incompletedir,"INCOMPLETE"+md5.new(i.filename+i.user).hexdigest()+basename)
+                     if os.access(winfname,os.F_OK):
+                         fname = winfname
+                     elif os.access(pyfname,os.F_OK):
+@@ -552,7 +561,14 @@
+ 			else:
+ 		            msg.file.close()
+ 			    basename = string.split(i.filename,'\\')[-1]
+-			    newname = self.getRenamed(os.path.join(os.path.dirname(msg.file.name),basename))
++			    downloaddir = self.eventprocessor.config.sections["transfers"]["downloaddir"]
++			    if i.path and i.path[0] == '/':
++			        folder = i.path
++			    else:
++			        folder = os.path.join(downloaddir, i.path)
++		            if not os.access(folder,os.F_OK):
++			        os.makedirs(folder)
++			    newname = self.getRenamed(os.path.join(folder, basename))
+ 		            os.rename(msg.file.name,newname)
+ 		            i.status = "Finished"
+ 			    self.eventprocessor.logMessage("Download finished: %s" %(newname))
+@@ -564,6 +580,15 @@
+ 			    self.eventprocessor.sendNumSharedFoldersFiles()
+ 			    self.SaveDownloads()
+ 			    self.downloadspanel.update(i)
++			    if self.eventprocessor.config.sections["transfers"]["afterfinish"]:
++			        escaped = ""
++			        for ch in newname:
++			           if ch not in string.ascii_letters+string.digits+"/":
++			               escaped += "\\"
++			           escaped += ch
++			        command = self.eventprocessor.config.sections["transfers"]["afterfinish"].replace("$", escaped)
++			        os.system(command)
++			        self.eventprocessor.logMessage("Executed: %s" % command)
+ 		    except IOError, (errno, strerror):
+ 			self.eventprocessor.logMessage("I/O error(%s): %s" % (errno, strerror))
+                         i.status = "Local file error"
+@@ -670,9 +695,16 @@
+ 	trusers = self.getTransferringUsers()
+ 	list = [i for i in self.uploads if not i.user in trusers and i.status == "Queued"]
+ 	listogg = [i for i in list if i.filename[-4:].lower() == ".ogg"]
++	if self.eventprocessor.config.sections["transfers"]["preferfriends"]:
++            userlist = [i[0] for i in self.eventprocessor.userlist.userlist]
++	    listfriends = [i for i in list if i.user in userlist]
++	else:
++	    listfriends = []
+ 	listprivileged = [i for i in list if i.user in self.privilegedusers]
+ 	if len(listogg) > 0:
+ 	    list = listogg
++	if len(listfriends) > 0:
++	    list = listfriends
+ 	if len(listprivileged) > 0:
+ 	    list = listprivileged
+ 	if len(list) == 0:
+@@ -691,16 +723,24 @@
+             if i.conn is msg.conn.conn:
+                 user = i.username
+ 		
++	
++        userlist = [i[0] for i in self.eventprocessor.userlist.userlist]
++	preferfriends = self.eventprocessor.config.sections["transfers"]["preferfriends"]
+ 	list = {user:time.time()}
+ 	listogg = {user:time.time()}
++	listfriend = {user:time.time()}
+ 	listpriv = {user:time.time()}
+ 	countogg = 0
+ 	countpriv = 0
++	countfriend = 0
+         for i in self.uploads:
+ 	    if i.status == "Queued":
+ 		if i.user in self.privilegedusers:
+ 		    listpriv[i.user] = i.timequeued
+ 		    countpriv += 1
++		elif i.user in userlist and preferfriends:
++		    listfriend[i.user] = i.timequeued
++		    countfriend += 1
+ 		elif i.filename[-4:].lower() == ".ogg":
+ 		    listogg[i.user] = i.timequeued
+ 		    countogg += 1
+@@ -710,11 +750,14 @@
+ 	place = 0
+ 	if user in self.privilegedusers:
+ 	    list = listpriv
++	elif user in userlist and preferfriends:
++	    list = listfriend
++	    place = place + countpriv
+ 	elif msg.file[-4:].lower() == ".ogg":
+ 	    list = listogg
+-	    place = place + countpriv
++	    place = place + countpriv + countfriend
+ 	else:
+-	    place = place + countpriv + countogg
++	    place = place + countpriv + countfriend + countogg
+ 	for i in list.keys():
+ 	    if list[i] < list[user]:
+ 		place = place + 1
+diff -rNu3 pyslsk-1.2.2/pysoulseek/utils.py slsk-tmp/pysoulseek/utils.py
+--- pyslsk-1.2.2/pysoulseek/utils.py	2003-06-24 01:03:23.000000000 +0200
++++ slsk-tmp/pysoulseek/utils.py	2003-06-24 02:47:01.000000000 +0200
+@@ -9,7 +9,7 @@
+ import os,dircache
+ import mp3
+ 
+-version = "1.2.2"
++version = "1.2.2-hyriand-7"
+ 
+ def getServerList(url):
+         """ Parse server text file from http://www.slsk.org and 
+@@ -183,4 +183,99 @@
+     for x in words:
+ 	d[x] = x
+     return d.values()
++
++def Humanize(number,fashion):
++    if fashion == "" or fashion == "<none>":
++        return str(number)
++    elif fashion == "<space>":
++        fashion = " "
++    number = str(number)
++    ret = ""
++    while number[-3:]:
++        part, number = number[-3:], number[:-3]
++        ret = "%s%s%s" % (part, fashion, ret)
++    return ret[:-1]
++ 
++def expand_alias(aliases, cmd):
++    def getpart(line):
++        if line[0] != "(":
++            return ""
++        ix = 1
++        ret = ""
++        level = 0
++        while ix < len(line):
++            if line[ix] == "(":
++                level = level + 1
++            if line[ix] == ")":
++                if level == 0:
++                    return ret
++                else:
++                    level = level - 1
++            ret = ret + line[ix]
++            ix = ix + 1
++        return ""
++
++    if not cmd:
++        return None
++    if cmd[0] != "/":
++        return None
++    cmd = cmd[1:].split(" ")
++    if not aliases.has_key(cmd[0]):
++        return None
++    alias = aliases[cmd[0]]
++    ret = ""
++    i = 0
++    while i < len(alias):
++        if alias[i:i+2] == "$(":
++            arg=getpart(alias[i+1:])
++            if not arg:
++                ret = ret + "$"
++                i = i + 1
++                continue
++            i = i + len(arg) + 3
++            args = arg.split("=",1)
++            if len(args) > 1:
++                default = args[1]
++            else:
++                default = ""
++            args = args[0].split(":")
++            if len(args) == 1:
++                first = last = int(args[0])
++            else:
++               if args[0]:
++                   first = int(args[0])
++               else:
++                   first = 1
++               if args[1]:
++                   last = int(args[1])
++               else:
++                   last = len(cmd)
++            v = string.join(cmd[first:last+1])
++            if not v: v = default
++            ret = ret + v
++        elif alias[i:i+2] == "|(":
++            arg = getpart(alias[i+1:])
++            if not arg:
++                ret = ret + "|"
++                i = i + 1
++                continue
++            i = i + len(arg) + 3
++            for j in range(len(cmd)-1, -1, -1):
++                arg = arg.replace("$%i" % j, cmd[j])
++            arg = arg.replace("$@", string.join(cmd[1:], " "))
++            stdin, stdout = os.popen2(arg)
++            v = stdout.read().split("\n")
++            r = ""
++            for l in v:
++                l = l.strip()
++                if l:
++                    r = r + l + "\n"
++            ret = ret + r.strip()
++            stdin.close()
++            stdout.close()
++            os.wait()
++        else:
++            ret = ret + alias[i]
++            i = i + 1
++    return ret
+      
+diff -rNu3 pyslsk-1.2.2/pysoulseek/wxgui/about.py slsk-tmp/pysoulseek/wxgui/about.py
+--- pyslsk-1.2.2/pysoulseek/wxgui/about.py	2003-05-04 18:09:14.000000000 +0200
++++ slsk-tmp/pysoulseek/wxgui/about.py	2003-06-24 12:41:16.000000000 +0200
+@@ -23,7 +23,7 @@
+         ok.SetDefault()
+ 
+ 	sizer.Add(wxStaticBitmap(self,-1,img,size=wxSize(img.GetWidth(), img.GetHeight())), flag=wxALL, border = 5)
+-	sizer.Add(wxStaticText(self,-1,"PySoulSeek "+version+"\nCopyright (c) 2001-2003 by Alexander Kanavin\nhttp://www.sensi.org/~ak/\nak@sensi.org\n\nReleased under the GNU general public license\n\nSee MAINTAINERS file for the list of contributors",style=wxALIGN_CENTRE), flag = wxALL, border = 5)
++	sizer.Add(wxStaticText(self,-1,"PySoulSeek "+version+"\nCopyright (c) 2001-2003 by Alexander Kanavin\nhttp://www.sensi.org/~ak/\nak@sensi.org\n\nModified by Hyriand\nhttp://thegraveyard.org/pyslsk/\nhyriand@thegraveyard.org\n\nReleased under the GNU general public license\n\nSee MAINTAINERS file for the list of contributors",style=wxALIGN_CENTRE), flag = wxALL, border = 5)
+ 
+ 	mainsizer.Add(sizer, flag=wxALL,border = 5)
+ 	mainsizer.Add(ok, flag = wxALL|wxALIGN_CENTER,border = 10)
+@@ -53,12 +53,16 @@
+ 	        "/join /j channel", "Join channel 'channel'",
+ 	        "/leave /l [channel]", "Leave channel 'channel'",
+ 	        "/part /p [channel]", "Leave channel 'channel'",
++	        "/clear /cl", "Clear the chat window",
+ 	        "", "",
+ 	        "/add /ad user", "Add user 'user' to your user list",
+ 	        "/browse /b user", "Browse files of user 'user'",
+ 	        "/whois /w user", "Request user info for user 'user'",
+ 	        "/ip user", "Show IP for user 'user'",
+ 	        "", "",
++	        "/alias /al [command [definition]]", "Add a new alias",
++	        "/unalias /un command", "Remove an alias",
++	        "", "",
+ 	        "/ban user", "Add user 'user' to your ban list",
+ 	        "/unban user", "Remove user 'user' from your ban list",
+ 	        "/ignore user", "Add user 'user' to your ignore list",
+@@ -78,12 +82,16 @@
+ 	else:
+ 	    help = [ \
+ 	        "/close", "Close the current private chat",
++	        "/clear /cl", "Clear the chat window",
+ 	        "", "",
+ 	        "/add /ad [user]", "Add user 'user' to your user list",
+ 	        "/browse /b [user]", "Browse files of user 'user'",
+ 	        "/whois /w [user]", "Request user info for user 'user'",
+ 	        "/ip [user]", "Show IP for user 'user'",
+ 	        "", "",
++	        "/alias /al [command [definition]]", "Add a new alias",
++	        "/unalias /un command", "Remove an alias",
++	        "", "",
+ 	        "/ban [user]", "Add user 'user' to your ban list",
+ 	        "/unban [user]", "Remove user 'user' from your ban list",
+ 	        "/ignore [user]", "Add user 'user' to your ignore list",
+@@ -113,3 +121,49 @@
+         self.SetSizer(mainsizer)
+         self.SetAutoLayout(True)
+         mainsizer.Fit(self)
++
++class AboutFilters(wxDialog):
++    def __init__(self, parent, id, title):
++
++        wxDialog.__init__(self,parent,id,title)
++
++	sizer = wxStaticBoxSizer(wxStaticBox(self,-1,""),wxHORIZONTAL)
++
++	mainsizer = wxBoxSizer(wxVERTICAL)
++
++        ok = wxButton(self, wxID_OK, "OK")
++        ok.SetDefault()
++
++	sizer.Add(wxStaticText(self,-1,"""Search filtering
++
++You can use this to refine which results are displayed. The full results
++from the server are always available if you clear all the search terms.
++
++You can filter by:
++
++Included text: Files are shown if they contain this text. Case is insensitive,
++but word order is important. "Spears Brittany" will not show any "Brittany Spears"
++
++Excluded text: As above, but files will not be displayed if the text matches
++
++Size: Shows results based on size. use > and < to find files larger or smaller.
++Files exactly the same as this term will always match. Use = to specify an exact
++match. Use k or m to specify kilo or megabytes. >10M will find files larger than
++10 megabytes. <4000k will find files smaller than 4000k.
++
++Bitrate: Find files based on bitrate. Use < and > to find lower or higher. >192
++finds 192 and higher, <192 finds 192 or lower. =192 only finds 192. for VBR, the
++average bitrate is used.
++
++Free slot: Show only those results from users which have at least one upload slot
++free.
++
++To set the filter, press Enter. This will apply to any existing results, and any
++more that are returned. To filter in a different way, just set the relevant terms.
++You do not need to do another search to apply a different filter.""",style=wxALIGN_CENTRE), flag = wxALL, border = 5)
++
++	mainsizer.Add(sizer, flag=wxALL,border = 5)
++	mainsizer.Add(ok, flag = wxALL|wxALIGN_CENTER,border = 10)
++        self.SetSizer(mainsizer)
++        self.SetAutoLayout(True)
++        mainsizer.Fit(self)
+diff -rNu3 pyslsk-1.2.2/pysoulseek/wxgui/buttonsplitter.py slsk-tmp/pysoulseek/wxgui/buttonsplitter.py
+--- pyslsk-1.2.2/pysoulseek/wxgui/buttonsplitter.py	2003-05-04 18:09:14.000000000 +0200
++++ slsk-tmp/pysoulseek/wxgui/buttonsplitter.py	2003-06-24 02:46:31.000000000 +0200
+@@ -10,6 +10,7 @@
+ class ButtonSplitterWindow(wxSplitterWindow):
+     def __init__(self, parent, id, getleft, getright, style = wxSP_3D): 
+         wxSplitterWindow.__init__(self,parent,id, style = style)
++        self.SetMinimumPaneSize(1)
+ 
+ 	self.panel = wxPanel(self, -1)
+ 	self.expbutton = wxButton(self.panel,-1,"<",size=(10,100))
+diff -rNu3 pyslsk-1.2.2/pysoulseek/wxgui/chat.py slsk-tmp/pysoulseek/wxgui/chat.py
+--- pyslsk-1.2.2/pysoulseek/wxgui/chat.py	2003-05-11 22:19:00.000000000 +0200
++++ slsk-tmp/pysoulseek/wxgui/chat.py	2003-06-24 12:41:01.000000000 +0200
+@@ -17,6 +17,7 @@
+ from sortablelist import sortableListCtrl
+ from wxPython.wx import *
+ import locale
++from pysoulseek.utils import version, Humanize, expand_alias
+ 
+ 
+ def GetCompletion(part, list):
+@@ -223,9 +224,10 @@
+     def SayChatRoom(self,msg,text):
+         self.CreateRoomWindow(msg.room)
+         self.joinedrooms[msg.room].SayChatRoom(msg,text)
+-	if text.find(self.frame.np.config.sections["server"]["login"])>=0:
++        login = self.frame.np.config.sections["server"]["login"]
++	if msg.user != login and text.find(login)>=0:
+ 	    self.frame.OnPageUpdated(self.parent, True)
+-            self.frame.SetTitle("(*) PySoulSeek")
++            self.frame.SetTitle("(*) PySoulSeek %s" % version)
+ 	else:
+ 	    self.frame.OnPageUpdated(self.parent)
+ 
+@@ -416,12 +418,12 @@
+             return username
+         elif col == 1:
+             if not sort:
+-                return locale.format("%s",self.parent.users[username].avgspeed,1)
++                return Humanize(self.parent.users[username].avgspeed,self.parent.frame.np.config.sections["ui"]["decimalsep"])
+             else:
+                 return self.parent.users[username].avgspeed
+         elif col == 2:
+             if not sort:
+-                return locale.format("%s",self.parent.users[username].files,1)
++                return Humanize(self.parent.users[username].files,self.parent.frame.np.config.sections["ui"]["decimalsep"])
+             else:
+                 return self.parent.users[username].files
+         else:
+@@ -457,7 +459,9 @@
+     """
+     def __init__(self, parent, id, queue, privatechat, peerconns, frame, style = wxNO_3D|wxSP_3D):
+         wxSplitterWindow.__init__(self,parent,id,wxDefaultPosition,wxDefaultSize,style,"splitterWindow")
++        self.SetMinimumPaneSize(1)
+         splitter = wxSplitterWindow(self,-1,style=wxNO_3D|wxSP_3DSASH)
++        splitter.SetMinimumPaneSize(1)
+ 	userlistpanel = wxPanel(self,-1)
+         self.userslistctrl = UsersList(userlistpanel,-1,style=wxLC_REPORT|wxLC_VIRTUAL)
+ 	self.leave = wxButton(userlistpanel, -1, "Leave")
+@@ -519,7 +523,11 @@
+     def OnEnter(self, event):
+         """ Processes chat phrase that we entered. """
+         text = self.frame.np.encode(self.mychatphrase.GetLineText(0))
++	result = expand_alias(self.frame.np.config.aliases, text)
++	if result is not None:
++	    text = result
+ 	if len(text) == 0:
++	  self.mychatphrase.Clear()
+ 	  return
+ 	s = text.split(" ", 1)
+ 	cmd = s[0]
+@@ -527,7 +535,13 @@
+ 	    rest = s[1]
+ 	else:
+ 	    rest = ""
+-	if cmd in ("/join", "/j"):
++	if cmd in ("/alias", "/al"):
++	    self.chat.AppendText(self.frame.np.config.AddAlias(rest))
++	elif cmd in ("/unalias", "/un"):
++	    self.chat.AppendText(self.frame.np.config.Unalias(rest))
++	elif cmd in ("/clear", "/cl"):
++	    self.chat.Clear()
++	elif cmd in ("/join", "/j"):
+ 	    if rest:
+ 	        self.queue.put(slskmessages.JoinRoom(rest))
+ 	elif cmd in ("/leave", "/part", "/l", "/p"):
+@@ -595,7 +609,7 @@
+             wxLogMessage("Command %s is not recognized" %(text))
+ 	else:
+             self.queue.put(slskmessages.SayChatroom(self.room, text))
+-	    self.frame.SetTitle("PySoulSeek")
++	    self.frame.SetTitle("PySoulSeek %s" % version)
+         self.mychatphrase.Clear()
+ 
+     def OnPhraseChar(self, event):
+@@ -668,18 +682,18 @@
+ 
+ 	if text[:4] == "/me ":
+ 	    str = "%s * %s %s\n" %(time.strftime("%X"),msg.user,text[4:])
+-	    color = "FOREST GREEN"
++	    color = self.frame.np.config.sections["ui"]["chatme"]
+ 	else:
+ 	    str = "%s [%s] %s\n" %(time.strftime("%X"),msg.user,text)
+ 	    if msg.user == self.frame.np.config.sections["server"]["login"]:
+-		color = wxBLUE
++		color = self.frame.np.config.sections["ui"]["chatlocal"]
+ 	    elif text.upper().find(self.frame.np.config.sections["server"]["login"].upper()) >= 0:
+-	        color = wxRED
++	        color = self.frame.np.config.sections["ui"]["chathilite"]
+ 		highlight = True	
+ 	    else:
+-		color = None
++		color = self.frame.np.config.sections["ui"]["chatremote"]
+ 
+-	if color is not None:
++	if color is not None and color != "":
+             self.chat.SetDefaultStyle(wxTextAttr(color))
+         self.chat.AppendUserText(self.frame.np.decode(str,wxUSE_UNICODE),msg.user,color)
+ 	self.chat.SetDefaultStyle(wxTextAttr())
+@@ -741,6 +755,10 @@
+         self.users={}
+         self.queue = queue
+ 	self.np = np
++	self.repliedusers = []
++
++    def OnAway(self, away):
++        self.repliedusers = []
+ 
+     def ShowMessage(self, msg, text):
+         """ Processes MessageUser message from the server. """
+@@ -754,14 +772,20 @@
+ 	timestamp = self.np.encode(time.strftime("%c",time.localtime()))
+ 	if text[:4] == "/me ":
+ 	    str = "%s * %s %s\n" %(timestamp,msg.user,text[4:])
+-	    color = "FOREST GREEN"
++	    color = self.np.config.sections["ui"]["chatme"]
+ 	else:
+ 	    str = "%s [%s] %s\n" %(timestamp,msg.user,text)
++	    color = self.np.config.sections["ui"]["chatremote"]
++	if color == "":
+ 	    color = None
+ 	self.users[msg.user].AddText(self.np.decode(str,wxUSE_UNICODE),color)
++	autoreply = self.np.config.sections["server"]["autoreply"]
++	if self.np.frame.away and autoreply and msg.user not in self.repliedusers:
++	    self.repliedusers.append(msg.user)
++	    self.users[msg.user].SendMessage(autoreply)
+ 	self.np.frame.OnPageUpdated(self)
+ 	self.OnPageUpdated(self.users[msg.user])
+-	self.np.frame.SetTitle("(*) PySoulSeek")
++	self.np.frame.SetTitle("(*) PySoulSeek %s" % version)
+         if self.users[msg.user].logctrl.GetValue():
+             self.users[msg.user].logfile.write(self.np.decode(str))
+ 
+@@ -851,6 +875,14 @@
+ 
+         if self.logctrl.GetValue() == 1:
+             self.OnLogCheckClick(None)
++	    try:
++	        logfile = open(os.path.join(self.parent.np.config.sections["logging"]["logsdir"], string.replace(self.user, os.sep, "-") + ".log"), 'r', 0)
++	    except:
++		return
++	    lines = logfile.readlines()
++	    for i in lines[-15:]:
++		self.AddText(i, 'brown')
++	    self.AddText('----------------------------------------------------\n', 'purple')
+ 
+     def OnRightUp(self,event):
+         pt = event.GetPosition()
+@@ -895,21 +927,29 @@
+         timestamp = self.parent.np.encode(time.strftime("%c",time.localtime()))
+         if text[:4] == "/me ":
+ 	    str = "%s * %s %s\n" %(timestamp,username,text[4:])
+-            color = "FOREST GREEN"
++            color = self.parent.np.config.sections["ui"]["chatme"]
+         else:
+             str = "%s %s\n" %(timestamp,text)
+-            color = wxBLUE
++            color = self.parent.np.config.sections["ui"]["chatlocal"]
++	if color == "":
++	    color = None
+ 
+ 	if len(text) > 0:
+ 	    self.AddText(self.parent.np.decode(str, wxUSE_UNICODE), color)
+             self.parent.queue.put(slskmessages.MessageUser(self.user, text))
+-	    self.parent.np.frame.SetTitle("PySoulSeek")
++	    self.parent.np.frame.SetTitle("PySoulSeek %s" % version)
+             if self.logctrl.GetValue():
+                 self.logfile.write(self.parent.np.decode(str))
+ 
+     def OnEnter(self, event):
+         """ Sends our chat phrase and updates the window."""
+         text = self.parent.np.encode(self.mychatphrase.GetLineText(0))
++	result = expand_alias(self.parent.np.config.aliases, text)
++	if result is not None:
++	    text = result
++	if len(text) == 0:
++	    self.mychatphrase.Clear()
++	    return
+ 	s = text.split(" ", 1)
+ 	cmd = s[0]
+ 	if len(s) > 1:
+@@ -921,7 +961,13 @@
+ 	    truerest = ""
+ 	else:
+ 	    truerest = rest
+-	if cmd in ("/away", "/a"):
++	if cmd in ("/alias", "/al"):
++	    self.chat.AppendText(self.parent.np.config.AddAlias(truerest))
++	elif cmd in ("/unalias", "/un"):
++	    self.chat.AppendText(self.parent.np.config.Unalias(truerest))
++	elif cmd in ("/clear", "/cl"):
++	    self.chat.Clear()
++	elif cmd in ("/away", "/a"):
+ 	    self.parent.np.frame.OnAway(event)
+ 	elif cmd in ("/quit", "/q"):
+ 	    self.parent.np.frame.Close()
+diff -rNu3 pyslsk-1.2.2/pysoulseek/wxgui/configwindow.py slsk-tmp/pysoulseek/wxgui/configwindow.py
+--- pyslsk-1.2.2/pysoulseek/wxgui/configwindow.py	2003-05-14 21:30:44.000000000 +0200
++++ slsk-tmp/pysoulseek/wxgui/configwindow.py	2003-06-24 02:46:31.000000000 +0200
+@@ -129,6 +129,46 @@
+         self._list.sort()
+         self.listbox.Set(self._list)
+ 
++class ColourPicker:
++    def __init__(self, parent, id, title):
++    	self.button = wxButton(parent, -1, title)
++    	self.textctrl = wxTextCtrl(parent, -1, size=wxSize(125,25), style=wxTE_READONLY|wxTE_RICH|wxTE_MULTILINE)
++    	self.button2 = wxButton(parent, -1, "Default")
++	self.parent = parent
++	self._value = ""
++	EVT_BUTTON(parent, self.button.GetId(), self.OnClick)
++	EVT_BUTTON(parent, self.button2.GetId(), self.OnClear)
++
++    def OnClick(self, event):
++    	colour = wxColourData()
++    	colour.SetColour(self._value)
++   	dlg = wxColourDialog(self.parent, colour)
++    	if dlg.ShowModal() == wxID_OK:
++    	    colour = dlg.GetColourData().GetColour()
++    	    if colour:
++    	        colourname = wxTheColourDatabase.FindName(colour)
++    	        if colourname:
++    	            self.SetValue(colourname)
++    	        else:
++    	            self.SetValue("#%2x%2x%2x" % (colour.Red(),colour.Green(),colour.Blue()))
++    	    else:
++    	        self.SetValue("")
++    	dlg.Destroy()
++
++    def OnClear(self,event):
++        self.SetValue("")
++
++    def GetValue(self):
++    	return self._value
++
++    def SetValue(self, value):
++    	self._value = value
++    	self.textctrl.Clear()
++    	style = self.textctrl.GetDefaultStyle()
++    	self.textctrl.SetDefaultStyle(wxTextAttr(value))
++	self.textctrl.AppendText(value.capitalize())
++	self.textctrl.SetDefaultStyle(style)
++
+ class ServerPanel(wxPanel):
+     def __init__(self,parent, encodings):
+ 	wxPanel.__init__(self, parent, -1)
+@@ -142,6 +182,8 @@
+         self.enc.SetSelection(0)
+         self.firstport = wxTextCtrl(self, -1, size=wxSize(50,25))
+         self.lastport = wxTextCtrl(self, -1, size=wxSize(50,25))
++        self.autoreply = wxTextCtrl(self, -1)
++        self.directconn = wxCheckBox(self, -1, "I can receive direct connections")
+ 
+         hostsizer = wxBoxSizer(wxHORIZONTAL)
+         hostsizer.Add(self.serverctrl)
+@@ -152,6 +194,10 @@
+         portsizer.Add(wxStaticText(self, -1, "-"),flag=wxALIGN_CENTER|wxRIGHT, border=5)
+         portsizer.Add(self.lastport)
+ 
++	autoreplysizer = wxBoxSizer(wxHORIZONTAL)
++	autoreplysizer.Add(wxStaticText(self, -1, "Auto-reply when away:"), flag=wxALIGN_CENTER|wxRIGHT, border = 5)
++	autoreplysizer.Add(self.autoreply, 1, flag=wxEXPAND)
++
+         serversizer = wxStaticBoxSizer(wxStaticBox(self,-1,"Server settings:"),wxVERTICAL)
+         serversizer.Add(wxStaticText(self, -1, "Server (if mail.slsk.org:2240 doesn't work, \ncheck http://www.sensi.org/~ak/pyslsk/ \nfor a newer client version):"),flag=wxTOP|wxLEFT, border = 10)
+         serversizer.Add(hostsizer,flag=wxLEFT|wxRIGHT, border = 10)
+@@ -169,6 +215,8 @@
+         awaysizer.Add(self.autoaway)
+         awaysizer.Add(wxStaticText(self, -1, " minutes of inactivity"),flag=wxALIGN_CENTER)
+         serversizer.Add(awaysizer,flag=wxTOP|wxLEFT, border = 10)
++	serversizer.Add(autoreplysizer,flag=wxTOP|wxLEFT|wxRIGHT|wxEXPAND, border = 10)
++	serversizer.Add(self.directconn,flag=wxTOP|wxLEFT, border = 10)
+ 
+ 	self.SetSizer(serversizer)
+ 	self.SetAutoLayout(True)
+@@ -186,53 +234,69 @@
+         wxPanel.__init__(self, parent, -1)
+ 	self.configwindow = configwindow
+ 
++	self.incompletedirctrl = wxTextCtrl(self,-1,size=wxSize(250, 25))
+ 	self.downloaddirctrl = wxTextCtrl(self,-1,size=wxSize(250, 25))
+ 	self.uploaddirsctrl = wxListBox(self, -1, size=wxSize(250,100))
+ 	self.uploadbandwidth = wxTextCtrl(self,-1,size=wxSize(30, 25))
++	self.incompletedirchoose = wxButton(self, -1, "Choose...")
+ 	self.downloaddirchoose = wxButton(self, -1, "Choose...")
+ 	self.sharedownloadctrl = wxCheckBox(self, -1, "Share download directory")
+ 	self.uploaddiradd = wxButton(self, -1, "Add...")
+ 	self.uploaddirrem = wxButton(self, -1, "Remove")
+         self.uploaddirrescan = wxButton(self, -1, "Rescan")
+-	self.rescanonstartup = wxCheckBox(self, -1, "Rescan shares on startup")
++	self.rescanonstartup = wxCheckBox(self, -1, "Rescan on startup")
+         self.useuploadlimit = wxCheckBox(self, -1, "Limit upload speed to ")
+         self.uploadlimit = wxTextCtrl(self, -1, size=wxSize(30,25))
+         self.limittransfer = wxRadioButton(self, -1, "per transfer", style=wxRB_GROUP)
+         self.limittotal = wxRadioButton(self, -1, "total for all transfers")
++	self.upload_use_slots = wxCheckBox(self,-1,"Number of uploads exceeds ")
++	self.upslots = wxTextCtrl(self,-1,size=wxSize(30,25))
++	self.preferfriends = wxCheckBox(self, -1, "Let users in my list download first")
+ 	self.queuelimit = wxTextCtrl(self, -1, size=wxSize(30,25))
+ 	
++	EVT_BUTTON(self,self.incompletedirchoose.GetId(),self.OnIncompleteChoose)
+ 	EVT_BUTTON(self,self.downloaddirchoose.GetId(),self.OnDownloadChoose)
+ 	EVT_BUTTON(self,self.uploaddiradd.GetId(),self.OnUploadAdd)
+ 	EVT_BUTTON(self,self.uploaddirrem.GetId(),self.OnUploadRem)
+         EVT_BUTTON(self,self.uploaddirrescan.GetId(),self.OnUploadRescan)
+ 	EVT_CHECKBOX(self,self.sharedownloadctrl.GetId(),self.OnShareDownload)
+         EVT_CHECKBOX(self,self.useuploadlimit.GetId(),self.OnUseUploadLimit)
++	EVT_CHECKBOX(self,self.upload_use_slots.GetId(),self.OnUploadChoose)
+ 
++	incompletesizer = wxBoxSizer(wxHORIZONTAL)
++        incompletesizer.Add(self.incompletedirctrl)
++        incompletesizer.Add(self.incompletedirchoose,flag=wxALIGN_CENTER)
++	
+ 	downloadsizer = wxBoxSizer(wxHORIZONTAL)
+         downloadsizer.Add(self.downloaddirctrl)
+         downloadsizer.Add(self.downloaddirchoose,flag=wxALIGN_CENTER)
+ 	
++	upslotssizer = wxBoxSizer(wxHORIZONTAL)
++	upslotssizer.Add(self.upload_use_slots)
++	upslotssizer.Add(self.upslots, flag=wxRIGHT, border=5)
++	upslotssizer.Add(wxStaticText(self, -1, "(NOT RECOMMENDED)"), flag=wxALIGN_CENTER)
++
+ 	uploadbuttonssizer = wxBoxSizer(wxVERTICAL)
+         uploadbuttonssizer.Add(self.uploaddiradd)
+         uploadbuttonssizer.Add(self.uploaddirrem)
+         uploadbuttonssizer.Add(self.uploaddirrescan)
++	uploadbuttonssizer.Add(self.rescanonstartup)
+ 
+ 	uploadsizer = wxBoxSizer(wxHORIZONTAL)
+ 	uploadsizer.Add(self.uploaddirsctrl)
+ 	uploadsizer.Add(uploadbuttonssizer)
+ 
+ 	bandwidthsizer = wxBoxSizer(wxHORIZONTAL)
++	bandwidthsizer.Add(wxStaticText(self, -1, "Upload speed exceeds"), flag=wxALIGN_CENTER)
+ 	bandwidthsizer.Add(self.uploadbandwidth, flag=wxLEFT, border=10)
+ 	bandwidthsizer.Add(wxStaticText(self, -1, " KBytes/sec"),flag=wxALIGN_CENTER)
+ 
+-        limitsizer = wxFlexGridSizer(cols=4, rows=2)
++        limitsizer = wxFlexGridSizer(cols=5, rows=2)
+ 	limitsizer.Add(self.useuploadlimit, border = 10)
+         limitsizer.Add(self.uploadlimit, border = 10)
+         limitsizer.Add(wxStaticText(self, -1, " KBytes/sec "), flag = wxALIGN_CENTER_VERTICAL)
+-	limitsizer.Add(0,0)
+-	limitsizer.Add(0,0)
+-	limitsizer.Add(0,0)
+         limitsizer.Add(self.limittransfer)
++	limitsizer.Add(0,0)
+         limitsizer.Add(0,0)
+ 	limitsizer.Add(0,0)
+         limitsizer.Add(0,0)
+@@ -244,22 +308,34 @@
+ 	queuesizer.Add(wxStaticText(self, -1, " megabytes"),flag=wxALIGN_CENTER)
+ 
+ 	transferssizer = wxStaticBoxSizer(wxStaticBox(self,-1,"Transfers settings:"),wxVERTICAL)
++	transferssizer.Add(wxStaticText(self, -1, "Incomplete file directory:"),flag=wxTOP|wxLEFT, border = 10)
++	transferssizer.Add(incompletesizer,flag=wxLEFT|wxRIGHT, border = 10)
+ 	transferssizer.Add(wxStaticText(self, -1, "Download directory:"),flag=wxTOP|wxLEFT, border = 10)
+ 	transferssizer.Add(downloadsizer,flag=wxLEFT|wxRIGHT, border = 10)
+ 	transferssizer.Add(self.sharedownloadctrl,flag=wxLEFT|wxTOP, border = 10)
+ 	transferssizer.Add(wxStaticText(self, -1, "Shared directories:"),flag=wxTOP|wxLEFT, border = 10)
+ 	transferssizer.Add(uploadsizer, flag=wxLEFT|wxRIGHT, border = 10)
+-	transferssizer.Add(self.rescanonstartup, flag=wxLEFT|wxTOP, border = 10)
+-	transferssizer.Add(wxStaticText(self, -1, "Locally queue uploads if total upload speed exceeds:"),flag=wxTOP|wxLEFT, border = 10)
+-	transferssizer.Add(bandwidthsizer,flag=wxLEFT|wxBOTTOM, border = 10)
++	transferssizer.Add(wxStaticText(self, -1, "Locally queue uploads if:"),flag=wxTOP|wxLEFT, border = 10)
++	transferssizer.Add(bandwidthsizer,flag=wxLEFT, border = 10)
++	transferssizer.Add(upslotssizer,flag=wxBOTTOM|wxLEFT, border = 10)
+ 	transferssizer.Add(limitsizer, flag=wxLEFT|wxBOTTOM, border = 10)
+ 	transferssizer.Add(queuesizer, flag=wxLEFT, border = 10)
++	transferssizer.Add(self.preferfriends, flag=wxLEFT|wxBOTTOM, border = 10)
+ 
+ 	self.needrescan = 0
+ 
+ 	self.SetSizer(transferssizer)
+ 	self.SetAutoLayout(True)
+ 
++    def OnIncompleteChoose(self,event):
++	downloadchoose = wxDirDialog(self)
++	val = downloadchoose.ShowModal()
++	if val == wxID_OK:
++	    dir = downloadchoose.GetPath()
++	    if dir is not None:
++		self.incompletedirctrl.SetValue(dir)
++	    if self.sharedownloadctrl.GetValue():
++		self.needrescan = 1
+ 
+     def OnDownloadChoose(self,event):
+ 	downloadchoose = wxDirDialog(self)
+@@ -310,6 +386,9 @@
+ 	    shared.append(encode(self.downloaddirctrl.GetValue()))
+ 	self.sharedfiles,self.sharedfilesstreams,self.wordindex, self.fileindex,self.sharedmtimes = utils.rescandirs(shared, self.sharedmtimes, self.sharedfiles, self.sharedfilesstreams, wxYield)
+ 
++    def OnUploadChoose(self,event):
++	self.upslots.Enable(self.upload_use_slots.GetValue())
++
+ class UserinfoPanel(wxPanel):
+     def __init__(self,parent):
+         wxPanel.__init__(self, parent, -1)
+@@ -341,6 +420,48 @@
+                 self.pic.SetValue(pic)
+ 
+ 
++class UiPanel(wxPanel):
++    def __init__(self,parent):
++        wxPanel.__init__(self, parent, -1)
++        
++	self.colourchatremote = ColourPicker(self, -1, "Remote text:")
++	self.colourchatlocal = ColourPicker(self, -1, "Local text:")
++	self.colourchatme = ColourPicker(self, -1, "/me text:")
++	self.colourhighlight = ColourPicker(self, -1, "Highlight colour:")
++	self.coloursearchnoqueue = ColourPicker(self, -1, "Without queue:")
++	self.coloursearchqueue = ColourPicker(self, -1, "With queue:")
++	self.decimalsep = wxComboBox(self, -1, style=wxCB_DROPDOWN|wxCB_READONLY, choices = ["<none>", ",", ".", "<space>"])
++	self.afterdownload = wxTextCtrl(self, -1)
++
++	uisizer=wxStaticBoxSizer(wxStaticBox(self,-1,"Colours:"),wxVERTICAL)
++	uisizer.Add(wxStaticText(self,-1,"Chat colours:"), flag=wxLEFT|wxTOP, border = 10)
++	chatcoloursgrid = wxFlexGridSizer(cols=3, vgap=2, hgap=5)
++	for i in self.colourchatremote, self.colourchatlocal, self.colourchatme, self.colourhighlight:
++	    chatcoloursgrid.Add(i.button, flag=wxEXPAND)
++	    chatcoloursgrid.Add(i.textctrl)
++	    chatcoloursgrid.Add(i.button2)
++	uisizer.Add(chatcoloursgrid, flag=wxEXPAND|wxLEFT, border=15)
++	uisizer.Add(wxStaticText(self,-1,"Search result colours:"),flag=wxLEFT|wxTOP, border=10)
++	searchcoloursgrid = wxFlexGridSizer(cols=3,vgap=2,hgap=5)
++	for i in self.coloursearchnoqueue, self.coloursearchqueue:
++	    searchcoloursgrid.Add(i.button, flag=wxEXPAND)
++	    searchcoloursgrid.Add(i.textctrl)
++	    searchcoloursgrid.Add(i.button2)
++	uisizer.Add(searchcoloursgrid, flag=wxEXPAND|wxLEFT, border=15)
++	decimalsepsizer = wxBoxSizer(wxHORIZONTAL)
++	decimalsepsizer.Add(wxStaticText(self, -1, "Decimal separator:"), flag=wxALIGN_CENTER|wxRIGHT, border = 5)
++	decimalsepsizer.Add(self.decimalsep)
++	uisizer.Add(decimalsepsizer, flag=wxTOP|wxLEFT|wxBOTTOM, border=10)
++	
++	commandsizer = wxBoxSizer(wxVERTICAL)
++	commandsizer.Add(wxStaticText(self, -1, "Run command after download finishes ($ for filename):"))
++	commandsizer.Add(self.afterdownload, flag=wxEXPAND)
++	uisizer.Add(commandsizer, flag=wxALL|wxEXPAND, border=10)
++	
++	self.SetSizer(uisizer)
++	self.SetAutoLayout(True)
++
++
+ class MiscPanel(wxPanel):
+     def __init__(self,parent):
+         wxPanel.__init__(self, parent, -1)
+@@ -367,6 +488,9 @@
+         resultssizer.Add(wxStaticText(self, -1, " results per search request"),flag=wxALIGN_CENTER)
+ 	miscsizer.Add(resultssizer,flag=wxTOP|wxLEFT, border = 10)
+ 
++        self.re_filter = wxCheckBox(self, -1, "Use regexps for filter in/out")
++        miscsizer.Add(self.re_filter, flag = wxLEFT|wxTOP, border = 10)
++
+ 	self.banlist = UserList(self, -1, wxSize(150,0), "Banned users:")
+ 	self.ignorelist = UserList(self, -1, wxSize(150,0), "Ignored users:")
+ 	badpeoplesizer = wxBoxSizer(wxHORIZONTAL)
+@@ -413,10 +537,12 @@
+ 	self.serverpanel = ServerPanel(nb, parent.np.getencodings())
+ 	self.transferspanel = TransfersPanel(nb, self)
+ 	self.userinfopanel = UserinfoPanel(nb)
++	self.uipanel = UiPanel(nb)
+ 	self.miscpanel = MiscPanel(nb)
+ 	nb.AddPage(self.serverpanel,"Server")
+ 	nb.AddPage(self.transferspanel,"Transfers")
+ 	nb.AddPage(self.userinfopanel,"Personal info")
++	nb.AddPage(self.uipanel,"Bloat")
+ 	nb.AddPage(self.miscpanel,"Miscellaneous")
+ 
+ 
+@@ -451,6 +577,7 @@
+ 	userinfo = config.sections["userinfo"]
+         logging = config.sections["logging"]
+ 	searches = config.sections["searches"]
++	ui = config.sections["ui"]
+ 	if server["server"] is not None:
+     	    self.serverpanel.serverctrl.SetValue(string.join([str(i) for i in server["server"]],":"))
+ 	if server["login"] is not None:
+@@ -468,6 +595,12 @@
+ 	    self.serverpanel.lastport.SetValue(str(server["portrange"][1]))
+ 	if server["autoaway"] is not None:
+ 	    self.serverpanel.autoaway.SetValue(str(server["autoaway"]))
++	if server["autoreply"] is not None:
++	    self.serverpanel.autoreply.SetValue(server["autoreply"])
++	if server["firewalled"] is not None:
++	    self.serverpanel.directconn.SetValue(not server["firewalled"])
++	if transfers["incompletedir"] is not None:
++	    self.transferspanel.incompletedirctrl.SetValue(transfers["incompletedir"])
+ 	if transfers["downloaddir"] is not None:
+ 	    self.transferspanel.downloaddirctrl.SetValue(transfers["downloaddir"])
+ 	if transfers["shared"] is not None:
+@@ -503,6 +636,15 @@
+ 	    self.miscpanel.usecustomban.SetValue(transfers["usecustomban"])
+ 	if transfers["customban"] is not None:
+ 	    self.miscpanel.customban.SetValue(transfers["customban"])
++	if transfers["preferfriends"] is not None:
++	    self.transferspanel.preferfriends.SetValue(transfers["preferfriends"])
++	if transfers["uploadslots"] is not None:
++	    self.transferspanel.upslots.SetValue(str(transfers["uploadslots"]))
++	if transfers["useupslots"] is not None:
++	    self.transferspanel.upload_use_slots.SetValue(transfers["useupslots"]);
++        self.transferspanel.OnUploadChoose(None)
++        if transfers["afterfinish"] is not None:
++            self.uipanel.afterdownload.SetValue(transfers["afterfinish"])
+ 	if userinfo["descr"] is not None:
+ 	    self.userinfopanel.descr.SetValue(eval(userinfo["descr"]))
+ 	if userinfo["pic"] is not None:
+@@ -515,6 +657,22 @@
+             self.miscpanel.loggingchatctrl.SetValue(logging["chatrooms"])
+ 	if searches["maxresults"] is not None:
+ 	    self.miscpanel.maxresults.SetValue(str(searches["maxresults"]))
++	if searches["re_filter"] is not None:
++	    self.miscpanel.re_filter.SetValue(searches["re_filter"])
++	if ui["chatremote"] is not None:
++	    self.uipanel.colourchatremote.SetValue(ui["chatremote"])
++	if ui["chatlocal"] is not None:
++	    self.uipanel.colourchatlocal.SetValue(ui["chatlocal"])
++	if ui["chatme"] is not None:
++	    self.uipanel.colourchatme.SetValue(ui["chatme"])
++	if ui["chatme"] is not None:
++	    self.uipanel.colourhighlight.SetValue(ui["chathilite"])
++	if ui["search"] is not None:
++	    self.uipanel.coloursearchnoqueue.SetValue(ui["search"])
++	if ui["searchq"] is not None:
++	    self.uipanel.coloursearchqueue.SetValue(ui["searchq"])
++	if ui["decimalsep"] is not None:
++	    self.uipanel.decimalsep.SetValue(ui["decimalsep"])
+ 
+ 
+     def GetSettings(self):
+@@ -560,6 +718,11 @@
+ 	    portrange = (firstport, lastport)
+ 	except:
+ 	    portrange = (2234, 2239)
++ 	try:
++	    uploadslots = int(encode(self.transferspanel.upslots.GetValue()))
++	except:
++	    uploadslots = None
++	useupslots = encode(self.transferspanel.upload_use_slots.GetValue())
+ 	banlist = []
+ 	for i in self.miscpanel.banlist.getList():
+ 	    banlist.append(encode(i))
+@@ -573,7 +736,10 @@
+ 		"ignorelist":ignorelist, \
+ 		"portrange":portrange, \
+ 		"autoaway":autoaway, \
++		"firewalled":not self.serverpanel.directconn.GetValue(), \
++		"autoreply":encode(self.serverpanel.autoreply.GetValue()), \
+ 		"enc":encode(self.serverpanel.enc.GetValue())},"transfers":{\
++		"incompletedir":encode(self.transferspanel.incompletedirctrl.GetValue()), \
+ 		"downloaddir":encode(self.transferspanel.downloaddirctrl.GetValue()), \
+ 		"shared":shared, "sharedfiles":self.transferspanel.sharedfiles, \
+ 		"sharedfilesstreams":self.transferspanel.sharedfilesstreams, \
+@@ -582,6 +748,10 @@
+ 	        "sharedmtimes":self.transferspanel.sharedmtimes, \
+ 		"rescanonstartup":encode(self.transferspanel.rescanonstartup.GetValue()),\
+ 		"uploadbandwidth":uploadbandwidth, \
++		"uploadslots":uploadslots, \
++		"useupslots":useupslots, \
++		"afterfinish":encode(self.uipanel.afterdownload.GetValue()), \
++		"preferfriends":encode(self.transferspanel.preferfriends.GetValue()), \
+ 		"uselimit":encode(self.transferspanel.useuploadlimit.GetValue()), \
+ 		"usecustomban":encode(self.miscpanel.usecustomban.GetValue()), \
+ 		"customban":encode(self.miscpanel.customban.GetValue()), \
+@@ -593,4 +763,11 @@
+ 		"logsdir":encode(self.miscpanel.logsdirctrl.GetValue()), \
+ 		"privatechat":encode(self.miscpanel.loggingprivatectrl.GetValue()), \
+ 		"chatrooms":encode(self.miscpanel.loggingchatctrl.GetValue())},
+-		"searches":{"maxresults":maxresults}}
++		"searches":{"maxresults":maxresults,"re_filter":self.miscpanel.re_filter.GetValue()}, \
++		"ui":{"chatremote":encode(self.uipanel.colourchatremote.GetValue()), \
++		"chatlocal":encode(self.uipanel.colourchatlocal.GetValue()), \
++		"chatme":encode(self.uipanel.colourchatme.GetValue()), \
++		"chathilite":encode(self.uipanel.colourhighlight.GetValue()), \
++		"search":encode(self.uipanel.coloursearchnoqueue.GetValue()), \
++		"searchq":encode(self.uipanel.coloursearchqueue.GetValue()),
++		"decimalsep":encode(self.uipanel.decimalsep.GetValue())}}
+diff -rNu3 pyslsk-1.2.2/pysoulseek/wxgui/frame.py slsk-tmp/pysoulseek/wxgui/frame.py
+--- pyslsk-1.2.2/pysoulseek/wxgui/frame.py	2003-06-24 00:52:26.000000000 +0200
++++ slsk-tmp/pysoulseek/wxgui/frame.py	2003-06-24 02:46:31.000000000 +0200
+@@ -138,6 +138,10 @@
+ 	helpmenu.Append(aboutPrivateID, '&Private chat commands', 'About private chat commands')
+ 	EVT_MENU(self,aboutPrivateID, self.OnAboutPrivateCommands)
+ 	helpmenu.AppendSeparator()
++	aboutFiltersID = wxNewId()
++	helpmenu.Append(aboutFiltersID, '&Search filters', 'About search filtering')
++	EVT_MENU(self,aboutFiltersID, self.OnAboutFilters)
++	helpmenu.AppendSeparator()
+         aboutID = wxNewId()
+         helpmenu.Append(aboutID, '&About', 'About PySoulSeek')
+         EVT_MENU(self, aboutID, self.OnAbout)
+@@ -147,17 +151,30 @@
+         self.SetMenuBar(self.mainmenu)
+ 
+         self.splitter = wxSplitterWindow(self, -1,style=wxSP_3DSASH)
+-	self.nb = notebook.IconNotebook(self.splitter, -1, style=wxCLIP_CHILDREN, frame = self)
++        
++        self.nbpanel = wxPanel(self.splitter,-1)
++        nbsizer = wxBoxSizer(wxVERTICAL)
++        
++	self.nb = notebook.IconNotebook(self.nbpanel, -1, style=wxCLIP_CHILDREN, frame = self)
++	nbsizer.Add(self.nb,1,wxEXPAND)
++	
++	expbutton = wxButton(self.nbpanel,-1,"-",size=wxSize(100,10))
++	nbsizer.Add(expbutton,0,wxALIGN_CENTER)
++	
++	self.nbpanel.SetSizer(nbsizer)
++	self.nbpanel.SetAutoLayout(True)
++	nbsizer.Fit(self.nbpanel)
+ 
+ 	self.sx = self.sy = None
+ 	
+ 	self.log = chat.OutputWindow(self.splitter,-1,style = wxTE_MULTILINE|wxTE_READONLY|wxTE_RICH)
+ 	
++	EVT_BUTTON(self, expbutton.GetId(), self.OnExpandLog)
+ 	EVT_RIGHT_UP(self.log, self.OnRightClickInLog)
+ 
+         wxLog_SetActiveTarget(wxLogTextCtrl(self.log))
+     
+-	self.splitter.SplitHorizontally(self.nb,self.log,400)	
++	self.splitter.SplitHorizontally(self.nbpanel,self.log,400)	
+ 
+ 	EVT_SIZE(self.splitter, self.OnSizeSplitter)
+ 
+@@ -181,6 +198,13 @@
+ 	if not self.np.config.needConfig():
+ 	    self.OnConnect(None)
+ 
++    def OnExpandLog(self, event):
++        if self.splitter.IsSplit():
++            self.splitter.Unsplit()
++        else:
++	    self.splitter.SplitHorizontally(self.nbpanel,self.log,400)
++	    self.log.Show()
++
+     def RescanFinished(self):
+ 	self.mainmenu.Enable(self.settingsID,1)
+ 	self.mainmenu.SetLabel(self.settingsID,"&Settings...")
+@@ -195,6 +219,8 @@
+         	    self.away = self.autoaway = False
+                     self.np.queue.put(slskmessages.SetStatus(2))
+                     self.SetStatusText("Online", 1)
++                    if self.np.privatechat is not None:
++                        self.np.privatechat.OnAway(self.away)
+ 		if not self.away:
+ 	            self.awaytimer.Start(1000*60*timeout,True)
+ 
+@@ -293,6 +319,8 @@
+ 	else:
+ 	    self.np.queue.put(slskmessages.SetStatus(2))
+ 	    self.SetStatusText("Online", 1)
++	if self.np.privatechat is not None:
++	    self.np.privatechat.OnAway(self.away)
+ 
+     def OnSettings(self, event):
+ 	self.configwindow.SetSettings(self.np.config)
+@@ -335,6 +363,9 @@
+     def OnAboutPrivateCommands(self, event):
+ 	about.AboutCommands(self, -1, "About Chat Commands", True).ShowModal()
+ 
++    def OnAboutFilters(self, event):
++	about.AboutFilters(self, -1, "About Search Filters").ShowModal()
++
+     def ConnectError(self,msg):
+         self.mainmenu.Enable(self.connectID,1)
+         self.mainmenu.Enable(self.disconnectID,0)
+@@ -472,7 +503,7 @@
+     
+     def OnInit(self):
+ 	wxInitAllImageHandlers()
+-        self.frame = MainFrame(None,-1,'PySoulSeek', self.config, self) 
++        self.frame = MainFrame(None,-1,'PySoulSeek %s' % utils.version, self.config, self) 
+         self.frame.Show(True) 
+         self.SetTopWindow(self.frame) 
+         return True 
+diff -rNu3 pyslsk-1.2.2/pysoulseek/wxgui/images.py slsk-tmp/pysoulseek/wxgui/images.py
+--- pyslsk-1.2.2/pysoulseek/wxgui/images.py	2003-05-04 18:09:14.000000000 +0200
++++ slsk-tmp/pysoulseek/wxgui/images.py	2003-06-24 02:46:31.000000000 +0200
+@@ -296,3 +296,18 @@
+     stream = cStringIO.StringIO(getUpData())
+     return wxImageFromStream(stream)
+ 
++#----------------------------------------------------------------------
++def getEmptyData():
++    return zlib.decompress(
++'x\xda\xeb\x0c\xf0s\xe7\xe5\x92\xe2b``\xe0\xf5\xf4p\t\x02\xd2\x02 \xcc\xc1\
++\x06$\xe5?\xffO\x04R,\xc5N\x9e!\x1c@P\xc3\x91\xd2\x01\xe4\xcbx\xba8\x86T\xcc\
++I\x16\x11\x10HX\xc0b\x10\xb8\xa4\xfaJC \xb3\x1b\xaf\x84\x0bP\x13\xfb~\x86\
++\x00\xb79_+\x80\xea\x18<]\xfd\\\xd69%4\x01\x00\xd4\x10\x16\xa5' )
++
++def getEmptyBitmap():
++    return wxBitmapFromImage(getEmptyImage())
++
++def getEmptyImage():
++    stream = cStringIO.StringIO(getEmptyData())
++    return wxImageFromStream(stream)
++
+diff -rNu3 pyslsk-1.2.2/pysoulseek/wxgui/notebook.py slsk-tmp/pysoulseek/wxgui/notebook.py
+--- pyslsk-1.2.2/pysoulseek/wxgui/notebook.py	2003-05-04 18:09:14.000000000 +0200
++++ slsk-tmp/pysoulseek/wxgui/notebook.py	2003-06-24 02:46:31.000000000 +0200
+@@ -6,6 +6,7 @@
+ 
+ from wxPython.wx import *
+ import images
++from pysoulseek.utils import version
+ 
+ class IconNotebook(wxNotebook):
+     def __init__(self, parent, id, style = None, frame = None): 
+@@ -16,6 +17,7 @@
+         self.imglist = wxImageList(18,18)
+         self.online = self.imglist.Add(images.getOnlineBitmap())
+ 	self.hilite = self.imglist.Add(images.getActiveBitmap())
++	self.empty = self.imglist.Add(images.getEmptyBitmap())
+         self.AssignImageList(self.imglist)
+ 	self.pages = []
+ 	self.page = 0
+@@ -23,13 +25,13 @@
+ 
+     def OnPageChanged(self, event):
+ 	self.page = event.GetSelection()
+-	self.SetPageImage(self.page,-1)
++	self.SetPageImage(self.page,self.empty)
+ 	if self.frame is not None:
+-	    self.frame.SetTitle("PySoulSeek")
++	    self.frame.SetTitle("PySoulSeek %s" % version)
+ 	event.Skip()
+ 
+     def AddPage(self, page, title):
+-	wxNotebook.AddPage(self, page, title)
++	wxNotebook.AddPage(self, page, title, False, self.empty)
+ 	self.pages.append(page)
+ 
+     def DeleteAllPages(self):
+diff -rNu3 pyslsk-1.2.2/pysoulseek/wxgui/search.py slsk-tmp/pysoulseek/wxgui/search.py
+--- pyslsk-1.2.2/pysoulseek/wxgui/search.py	2003-05-04 18:09:14.000000000 +0200
++++ slsk-tmp/pysoulseek/wxgui/search.py	2003-06-24 02:46:31.000000000 +0200
+@@ -17,6 +17,10 @@
+ from sortablelist import sortableListCtrl
+ from wxPython.wx import *
+ import locale
++from pysoulseek.utils import Humanize
++from configwindow import encode
++import re
++import sre_constants
+ 
+ class SearchWindow(wxPanel):
+     """ A search window with notebook that contains search results.
+@@ -139,18 +143,32 @@
+                 tab, list = self.MakeSearchTab(msg.token, not remember is None)
+                 self.searches[msg.token] = [list, text, remember]
+                 self.resultsnb.AddPage(tab,text)
+-            self.searches[msg.token][0].AddResult(msg, username)
+-	    self.onupdate(self)
+-	    self.resultsnb.OnPageUpdated(self.searches[msg.token][0].parent)
++            if self.searches[msg.token][0].AddResult(msg, username):
++	        self.onupdate(self)
++	        self.resultsnb.OnPageUpdated(self.searches[msg.token][0].parent)
+ 
+     def MakeSearchTab(self, requestid, canRemember = True):
+         """ Create a result window, which is a notebook tab. """
+         panel = wxPanel(self.resultsnb, -1)
++        panel.filterin =  wxTextCtrl(panel, -1, value = "", size = wxSize(55,20), style = wxTE_PROCESS_ENTER)
++        panel.filterout =  wxTextCtrl(panel, -1, value = "", size = wxSize(55,20), style = wxTE_PROCESS_ENTER)
++        panel.filtersize =  wxTextCtrl(panel, -1, value = "", size = wxSize(55,20), style = wxTE_PROCESS_ENTER)
++        panel.filterbr =  wxTextCtrl(panel, -1, value = "", size = wxSize(45,20), style = wxTE_PROCESS_ENTER)
++        panel.filterfree = wxCheckBox(panel, -1, label = "free slot")
+         close = wxButton(panel, -1, "Close")
+ 	closeignore = wxButton(panel, -1, "Close and ignore")
+ 	panel.rememberctrl = wxCheckBox(panel, -1, label = "Remember")
+         list = SearchList(panel, -1, self.processrequest, self.privatechat, self.info, self.browse, self.transfers,self.frame)
+         sizerh = wxBoxSizer(wxHORIZONTAL)
++        sizerh.Add(wxStaticText(panel, -1, label = " Filter In: "), flag = wxALIGN_CENTER)
++        sizerh.Add(panel.filterin)
++        sizerh.Add(wxStaticText(panel, -1, label = " Filter Out: "), flag = wxALIGN_CENTER)
++        sizerh.Add(panel.filterout)
++        sizerh.Add(wxStaticText(panel, -1, label = " Size: "), flag = wxALIGN_CENTER)
++        sizerh.Add(panel.filtersize)
++        sizerh.Add(wxStaticText(panel, -1, label = " Bitrate: "), flag = wxALIGN_CENTER)
++        sizerh.Add(panel.filterbr)
++        sizerh.Add(panel.filterfree, flag = wxALIGN_CENTER|wxLEFT, border=5)
+         sizerh.Add(60,10,1,wxEXPAND)
+ 	sizerh.Add(closeignore)
+         sizerh.Add(close)
+@@ -162,6 +180,11 @@
+         panel.SetAutoLayout(True)
+         EVT_BUTTON(self, close.GetId(), self.OnClose)
+ 	EVT_BUTTON(self, closeignore.GetId(), self.OnCloseIgnore)
++ 	EVT_TEXT_ENTER(self, panel.filterin.GetId(), list.OnRefilter)
++	EVT_TEXT_ENTER(self, panel.filterout.GetId(), list.OnRefilter)
++	EVT_TEXT_ENTER(self, panel.filtersize.GetId(), list.OnRefilter)
++	EVT_TEXT_ENTER(self, panel.filterbr.GetId(), list.OnRefilter)
++	EVT_CHECKBOX(self, panel.filterfree.GetId(), list.OnRefilter)
+         EVT_CHECKBOX(self, panel.rememberctrl.GetId(), self.OnRememberCheckClick)
+         if not canRemember:
+            panel.rememberctrl.Enable(0)
+@@ -184,7 +207,7 @@
+ 
+ 	parent = self.resultsnb
+         self.resultsnb.DeletePage(selectednum)
+-	if parent.GetPageCount() > 0:
++	if parent.GetPageCount() > selectednum:
+ 	    parent.SetSelection(0)
+ 
+     def OnClose(self, event):
+@@ -205,6 +228,16 @@
+ 	     self.frame.np.config.writeConfig()
+ 	     self.searches[id][2] = value
+ 
++class FakeRe:
++    def __init__(self, phrase):
++        self.words = phrase.split(" ")
++
++    def search(self, haystack):
++        for word in self.words:
++	    if haystack.find(word) == -1:
++	        return False
++	return True
++
+ class SearchList(sortableListCtrl):
+     """ List of search results."""
+     def __init__(self, parent, id, processrequest, privatechat, info, browse, transfers,frame,style = wxLC_REPORT|wxLC_VIRTUAL|wxLC_VRULES|wxSUNKEN_BORDER):
+@@ -235,12 +268,19 @@
+         self.transfers = transfers
+ 	self.frame = frame
+ 
++        self.foundUsers = []
+         self.results = []
++        self.results_visible = []
++
++	self.UpdateColours()
+ 
+         self.menu = wxMenu()
+         downloadID=wxNewId()
+         self.menu.Append(downloadID, 'Download File(s)')
+         EVT_MENU(self,downloadID, self.OnDownload)
++        downloadToID=wxNewId()
++        self.menu.Append(downloadToID, 'Download File(s) to...')
++        EVT_MENU(self,downloadToID, self.OnDownloadTo)
+         downloadfolderID=wxNewId()
+         self.menu.Append(downloadfolderID, 'Download Containing Folder')
+         EVT_MENU(self,downloadfolderID, self.OnDownloadFolder)
+@@ -267,12 +307,16 @@
+         EVT_RIGHT_UP(self,self.OnRightUp)
+ 
+ 
++    def UpdateColours(self):
++    	self.normal.SetTextColour(self.frame.np.config.sections["ui"]["search"])
++        self.grey.SetTextColour(self.frame.np.config.sections["ui"]["searchq"])
++
+     def OnRightUp(self,event):
+         """ Pops up a menu on a right-click in users list."""
+ 	pt = event.GetPosition()
+         item, flags = self.HitTest(pt)
+         self.id = item
+-	self.selecteduser = self.results[self.id][2]
++	self.selecteduser = self.results_visible[self.id][2]
+         if item >= 0:
+             self.SetItemState(item,wxLIST_STATE_FOCUSED,wxLIST_STATE_FOCUSED)
+             self.PopupMenu(self.menu, pt)
+@@ -297,24 +341,116 @@
+         self.frame.np.queue.put(slskmessages.GetPeerAddress(self.selecteduser))
+ 
+ 
+-    def OnDownload(self, event):
++    def OnDownload(self, event, path = ""):
+         item = -1
+         while 1:
+             item = self.GetNextItem(item,wxLIST_NEXT_ALL,wxLIST_STATE_SELECTED|wxLIST_STATE_FOCUSED)
+             if item == -1:
+                 break
+-            self.transfers.getFile(self.results[item][2],self.results[item][9]+self.results[item][1])
++            self.transfers.getFile(self.results_visible[item][2],self.results_visible[item][9]+self.results_visible[item][1],path )
++
++    def OnDownloadTo(self, event):
++        downloadchoose = wxDirDialog(self)
++        val = downloadchoose.ShowModal()
++        if val == wxID_OK:
++            dir = downloadchoose.GetPath()
++            if dir is None:
++                return
++            self.OnDownload(event, self.frame.np.encode(dir))
+ 
+     def OnDownloadFolder(self,event):
+-        self.processrequest(self.selecteduser, slskmessages.FolderContentsRequest(None,self.results[self.id][9]))
++        self.processrequest(self.selecteduser, slskmessages.FolderContentsRequest(None,self.results_visible[self.id][9]))
+  
++    def checkDigit(self, filter, value, factorize = True):
++        op = ">="
++        if filter[:1] in (">", "<", "="):
++            op, filter = filter[:1]+"=", filter[1:]
++
++	if not filter:
++	    return True
++
++        factor = 1
++        if factorize:
++            if filter.lower()[-1] == "g":
++                factor = 1024*1024*1024
++                filter = filter[:-1]
++            elif filter.lower()[-1] == "m":
++                factor = 1024*1024
++                filter = filter[:-1]
++            elif filter.lower()[-1] == "k":
++                factor = 1024
++                filter = filter[:-1]
++
++        if not filter:
++            return True
++
++        if not filter.isdigit():
++            return True
++
++        filter = long(filter) * factor
++
++        if eval(str(value)+op+str(filter)):
++            return True
++
++        return False
++
++    def getFilters(self):
++        if self.frame.np.config.sections["searches"]["re_filter"]:
++            Searcher = re.compile
++        else:
++            Searcher = FakeRe
++
++        txt = encode(self.parent.filterin.GetLineText(0))
++        filterin = None
++        if txt:
++            try:
++                filterin = Searcher(txt.lower())
++            except sre_constants.error:
++                pass
++
++        txt = encode(self.parent.filterout.GetLineText(0))
++        filterout = None
++        if txt:
++            try:
++                filterout = Searcher(txt.lower())
++            except sre_constants.error:
++                pass
++
++        filtersize = encode(self.parent.filtersize.GetLineText(0)).replace(" ", "")
++        filterbr = encode(self.parent.filterbr.GetLineText(0)).replace(" ", "")
++	return (filterin, filterout, filtersize, filterbr)
++
++    def checkFilter(self, filters, name, size, br, free):
++        if self.parent.filterfree.GetValue() and not free:
++            return False
++
++        if filters[0] and not filters[0].search(name.lower()):
++            return False
++
++        if filters[1] and filters[1].search(name.lower()):
++            return False
++
++        if filters[2] and not self.checkDigit(filters[2], size):
++            return False
++
++        if filters[3] and not self.checkDigit(filters[3], br, False):
++            return False
++
++        return True
++
+     def AddResult(self, msg, username):
+         """ Add a result to the list."""
++        if username in self.foundUsers:
++            return 0
++        self.foundUsers.append(username)
++        filters = self.getFilters()
++        results = 0
+         for i in msg.list:
+             name = i[1].split('\\')[-1]
+             dir = i[1][:-len(name)]
+             user = username
+             size = i[2]
++            br = 0
+ 
+             if i[3] == 'mp3' and len(i[4]) == 3:
+                 attrs = i[4]
+@@ -323,6 +459,7 @@
+                 else:
+                     brs = ''
+                 bitrate = str(attrs[0]) + brs
++                br = attrs[0]
+                 length = '%i:%02i' %(attrs[1] / 60, attrs[1] % 60)
+             elif i[3] == '':
+                 bitrate = length =  ""
+@@ -332,24 +469,28 @@
+ 		immdownload = "Y"
+ 	    else:
+ 		immdownload = ""
+-            self.results.append([len(self.results)+1,name,user,size,msg.ulspeed,msg.inqueue,immdownload,bitrate,length,dir])
+-	if self.sortcol != -1:
++            self.results.append([len(self.results)+1,name,user,size,msg.ulspeed,msg.inqueue,immdownload,bitrate,length,dir,br])
++            if self.checkFilter(filters, name, size, br, immdownload):
++                self.results_visible.append([len(self.results),name,user,size,msg.ulspeed,msg.inqueue,immdownload,bitrate,length,dir,br])
++                results += 1
++	if results and self.sortcol != -1:
+ 	    self.SortList(self.sortcol, self.sortorder)
+-        self.SetItemCount(len(self.results))
++        self.SetItemCount(len(self.results_visible))
++        return results
+ 
+     def OnGetItemText(self, item, col):
+ 	import types
+-	text = self.results[item][col]
++	text = self.results_visible[item][col]
+ 	if type(text) == types.StringType:
+ 	    if len(text) > 0:
+ 	        return self.frame.np.decode(text,wxUSE_UNICODE)
+ 	    else:
+ 		return ''
+ 	else:
+-            return locale.format("%s",text,1)
++            return Humanize(text,self.frame.np.config.sections["ui"]["decimalsep"])
+ 
+     def OnGetItemAttr(self, item):
+-        if self.results[item][6] == "":
++        if self.results_visible[item][6] == "":
+             return self.grey
+         else:
+             return self.normal
+@@ -357,9 +498,18 @@
+     def OnGetItemImage(self, item):
+ 	return -1
+ 
++    def refilter(self):
++        filters = self.getFilters()
++        self.results_visible = [i for i in self.results if self.checkFilter(filters, i[1], i[3], i[10], i[6])]
++        self.SetItemCount(len(self.results_visible))
++
++    def OnRefilter(self, event):
++        self.refilter()
++
+     def SortList(self, col, order):
++        self.refilter()
+         if order == 0:
+-            self.results.sort(lambda x,y: self.cmp(x[col],y[col]))
++            self.results_visible.sort(lambda x,y: self.cmp(x[col],y[col]))
+         else:
+-            self.results.sort(lambda y,x: self.cmp(x[col],y[col]))
++            self.results_visible.sort(lambda y,x: self.cmp(x[col],y[col]))
+ 
+diff -rNu3 pyslsk-1.2.2/pysoulseek/wxgui/transfers.py slsk-tmp/pysoulseek/wxgui/transfers.py
+--- pyslsk-1.2.2/pysoulseek/wxgui/transfers.py	2003-05-06 16:32:05.000000000 +0200
++++ slsk-tmp/pysoulseek/wxgui/transfers.py	2003-06-24 02:46:31.000000000 +0200
+@@ -11,6 +11,7 @@
+ import time
+ from sortablelist import sortableListCtrl
+ import locale
++from types import StringType
+ 
+ class TransfersList(sortableListCtrl):
+     """ This is a list control for transfers. Gets transfer data from transfer
+@@ -30,6 +31,26 @@
+ 	self.update(None)
+ 
+ 
++    def Humanize(self, size):
++    	if size is None:
++    	    return None
++	priv = ""
++        if type(size) is StringType and size[-13:] == " (privileged)":
++		size, priv = size[:-13], size[-13:]
++        try:
++	    s = int(size)
++	    if s > 1024*1024*1024:
++	        r = "%.2f GB" % ((float(s) / (1024.0*1024.0*1024.0)))
++	    elif s > 1024*1024:
++	        r = "%.2f MB" % ((float(s) / (1024.0*1024.0)))
++	    elif s > 1024:
++	        r = "%.2f KB" % ((float(s) / 1024.0))
++	    else:
++                r = str(size)
++	    return r + priv
++	except:
++	    return size + priv
++
+     def update(self, item):
+ 	if item is not None:
+ 	    if item in self.list:
+@@ -47,15 +68,21 @@
+ 	    for i in range(len(self.list), self.GetItemCount()):
+ 		self.DeleteItem(len(self.list))
+ 
+-    def GetColumnText(self,item,col):
++    def GetColumnText(self,item,col,sort=False):
+ 	if col == 0:
+ 	    return string.split(item.filename,'\\')[-1]
+ 	if col == 1:
+ 	    return item.user
+ 	if col == 2:
+-	    return item.status
++	    if not sort:
++	        return self.Humanize(item.status)
++	    else:
++	        return item.status
+ 	if col == 3:
+-	    return locale.format("%s",item.size,1)
++	    if not sort:
++	        return self.Humanize(item.size)
++	    else:
++	        return item.size
+ 	if col == 4:
+             if item.speed is not None:
+ 	        return "%.1f" %(item.speed)
+@@ -74,9 +101,9 @@
+ 
+     def SortList(self, col, order):
+         if order == 0:
+-            self.list.sort(lambda x,y: self.cmp(self.GetColumnText(x,col),self.GetColumnText(y,col)))
++            self.list.sort(lambda x,y: self.cmp(self.GetColumnText(x,col,True),self.GetColumnText(y,col,True)))
+         else:
+-            self.list.sort(lambda y,x: self.cmp(self.GetColumnText(x,col),self.GetColumnText(y,col)))
++            self.list.sort(lambda y,x: self.cmp(self.GetColumnText(x,col,True),self.GetColumnText(y,col,True)))
+ 	self.update(None)
+ 
+ 
+diff -rNu3 pyslsk-1.2.2/pysoulseek/wxgui/userinfobrowse.py slsk-tmp/pysoulseek/wxgui/userinfobrowse.py
+--- pyslsk-1.2.2/pysoulseek/wxgui/userinfobrowse.py	2003-05-04 18:09:14.000000000 +0200
++++ slsk-tmp/pysoulseek/wxgui/userinfobrowse.py	2003-06-24 02:46:31.000000000 +0200
+@@ -17,6 +17,9 @@
+ from sortablelist import sortableListCtrl
+ from wxPython.wx import *
+ import locale
++from pysoulseek.utils import Humanize
++import string
++import os
+ 
+ class UserNotebook(notebook.IconNotebook):
+     """ This is a notebook with user's information. Used to show either
+@@ -34,6 +37,7 @@
+         if not self.users.has_key(user):
+             self.users[user]= self.subwindow(self, -1, user, conn, self.frame)
+             self.AddPage(self.users[user],user)
++       	    self.queue.put(slskmessages.GetUserStatus(user))
+         else:
+             self.users[user].conn = conn
+ 
+@@ -51,6 +55,17 @@
+             if i.conn == msg.conn.conn:
+                 i.UpdateGauge(msg)
+ 
++    def GetUserStatus(self, msg):
++	if self.users.has_key(msg.user):
++	    for i in range(self.GetPageCount()):
++	        if self.GetPage(i) == self.users[msg.user] and self.GetPage(i).status != msg.status:
++		    if msg.status == 0:
++			self.SetPageText(i, msg.user + " (offline)")
++		    elif msg.status == 1:
++			self.SetPageText(i, msg.user + " (away)")
++                    elif msg.status == 2:
++                        self.SetPageText(i, msg.user + " (online)")
++
+ class picScrolledWindow(wxScrolledWindow):
+     def __init__(self, parent, pic):
+         wxScrolledWindow.__init__(self, parent, -1, wxPoint(0, 0),size = wxSize(pic.GetWidth(), pic.GetHeight()))
+@@ -66,6 +81,7 @@
+     and all. Was rather hard to get the layout of widgets just right."""
+     def __init__(self, parent, id, user, conn, frame):
+         wxPanel.__init__(self, parent, id)
++        self.status = ""
+         self.gauge = wxGauge(self,-1,100,size=wxSize(250, 25),style=wxGA_HORIZONTAL|wxGA_SMOOTH)
+         self.close = wxButton(self, -1, "Close")
+ 	self.savepic = wxButton(self, -1, "Save pic")
+@@ -86,16 +102,15 @@
+ 	self.image = None
+ 
+ 	buttonsizer = wxBoxSizer(wxVERTICAL)
++	buttonsizer.Add(self.chat, 0, wxEXPAND|wxTOP|wxLEFT|wxRIGHT, border=10)
++	buttonsizer.Add(self.browse,0,wxEXPAND|wxTOP|wxLEFT|wxRIGHT, border=10)
++	buttonsizer.Add(self.getip, 0, wxEXPAND|wxTOP|wxLEFT|wxRIGHT, border=10)
++        buttonsizer.Add(self.addtolist,0,wxEXPAND|wxTOP|wxLEFT|wxRIGHT, border=10)
++        buttonsizer.Add(self.ban,0,wxEXPAND|wxTOP|wxLEFT|wxRIGHT, border=10)
++        buttonsizer.Add(self.savepic,0,wxEXPAND|wxTOP|wxLEFT|wxRIGHT, border=10)
+         buttonsizer.Add(0,0,1,wxEXPAND)
+-	buttonsizer.Add(self.chat, 0, wxEXPAND, border=10)
+-	buttonsizer.Add(self.browse,0,wxEXPAND, border=10)
+-        buttonsizer.Add(self.addtolist,0,wxEXPAND, border=10)
+-	buttonsizer.Add(self.getip, 0, wxEXPAND, border=10)
+-        buttonsizer.Add(self.ban,0,wxEXPAND, border=10)
+-        buttonsizer.Add(self.savepic,0,wxEXPAND, border=10)
+-        buttonsizer.Add(self.refresh,0,wxEXPAND, border=10)
+-        buttonsizer.Add(10,10,0,wxEXPAND)
+-	buttonsizer.Add(self.close,0,wxEXPAND, border=10)
++        buttonsizer.Add(self.refresh,0,wxEXPAND|wxLEFT|wxRIGHT, border=10)
++	buttonsizer.Add(self.close,0,wxEXPAND|wxALL, border=10)
+        
+         sizerv = wxBoxSizer(wxVERTICAL)
+         sizerv.Add(wxStaticText(self,-1, "Self-description:"))
+@@ -204,7 +219,7 @@
+ 
+ class FileListCtrl(sortableListCtrl):
+     """ This is a list of a user's files in a particular directory"""
+-    def __init__(self, parent, id, style = wxLC_REPORT|wxLC_VIRTUAL|wxSUNKEN_BORDER|wxLC_VRULES):
++    def __init__(self, parent, id, frame, style = wxLC_REPORT|wxLC_VIRTUAL|wxSUNKEN_BORDER|wxLC_VRULES):
+         sortableListCtrl.__init__(self,parent,id,style = style)
+         self.InsertColumn(0,"Filename", width=200)
+         self.InsertColumn(1,"Size",width=100,format=wxLIST_FORMAT_RIGHT)
+@@ -215,6 +230,8 @@
+         self.dir = None
+ 
+         self.parent = parent
++        self.frame = frame
++        self.curtreeitem = None
+ 
+     def SetFileList(self, list):
+         """ Actually sets the list."""
+@@ -237,7 +254,7 @@
+             return item[1]
+         if col == 1:
+             if not sort:
+-                return locale.format("%s", item[2], 1)
++                return Humanize(item[2],self.frame.np.config.sections["ui"]["decimalsep"])
+             else:
+                 return item[2]
+         if col == 2 or col == 3:
+@@ -287,13 +304,15 @@
+     tree on the left and a file list on the right"""
+     def __init__(self, parent, id, user, conn, frame):
+         wxPanel.__init__(self, parent, id)
++        self.status = ""
+         self.gauge = wxGauge(self,-1,100,size=wxSize(250, 25),style=wxGA_HORIZONTAL|wxGA_SMOOTH)
+         self.search =  wxTextCtrl(self,-1, size = wxSize(300,25),style = wxTE_PROCESS_ENTER)
+         self.close = wxButton(self, -1, "Close")
+ 	self.refresh = wxButton(self, -1, "Refresh")
+         splitter = wxSplitterWindow(self,-1,style=wxNO_3D|wxSP_3DSASH)
++        splitter.SetMinimumPaneSize(1)
+         self.tree = DirTreeCtrl(splitter, -1)
+-        self.listctrl = FileListCtrl(splitter,-1)
++        self.listctrl = FileListCtrl(splitter,-1,frame)
+ 
+         sizerlowh = wxBoxSizer(wxHORIZONTAL)
+         sizerlowh.Add(self.gauge,0,wxEXPAND)
+@@ -342,9 +361,21 @@
+         downloaddirID=wxNewId()
+         self.treemenu.Append(downloaddirID, 'Download Directory')
+         EVT_MENU(self.tree,downloaddirID, self.OnDownloadDir)
++        downloaddirtoID=wxNewId()
++        self.treemenu.Append(downloaddirtoID, "Download Directory to...")
++        EVT_MENU(self.tree,downloaddirtoID, self.OnDownloadDirTo)
++        recdownloaddirID=wxNewId()
++        self.treemenu.Append(recdownloaddirID, 'Recursively Download Dir')
++        EVT_MENU(self.tree,recdownloaddirID, self.OnRecDownloadDir)
++        recdownloaddirtoID=wxNewId()
++        self.treemenu.Append(recdownloaddirtoID, 'Recursively Download Dir to...')
++        EVT_MENU(self.tree,recdownloaddirtoID, self.OnRecDownloadDirTo)
+         downloadfileID=wxNewId()
+         self.listmenu.Append(downloadfileID, 'Download File(s)')
+         EVT_MENU(self.listctrl,downloadfileID, self.OnDownloadFile)
++        downloadtoID=wxNewId()
++        self.listmenu.Append(downloadtoID, 'Download to...')
++        EVT_MENU(self.listctrl,downloadtoID, self.OnDownloadTo)
+         self.treemenu.AppendSeparator()
+         self.listmenu.AppendSeparator()
+         sendmessageID=wxNewId()
+@@ -431,23 +462,44 @@
+ 
+     def OnTreeSelChanged(self, event):
+         """ On selection of a tree item, display the filelist"""
+-        self.listctrl.SetFileList(self.tree.GetPyData(event.GetItem()))
++        self.curtreeitem = event.GetItem()
++        self.listctrl.SetFileList(self.tree.GetPyData(self.curtreeitem))
+ 
+-    def OnDownloadDir(self,event):
++    def OnDownloadDir(self,event, prefix=""):
+         """ Get every file in the directory """
+         import string
+-        dir = string.split(self.listctrl.dir,'\\')[-1]
++        dir = os.path.join(prefix, string.split(self.listctrl.dir,'\\')[-1])
+         for i in self.listctrl.list:
+             self.transfers.getFile(self.user, self.listctrl.dir+'\\'+i[1], dir)
+ 
+-    def OnDownloadFile(self,event):
++    def OnDownloadDirTo(self,event):
++        """ Ask for destination dir and get directory """
++        downloadchoose = wxDirDialog(self)
++        val = downloadchoose.ShowModal()
++        if val == wxID_OK:
++            dir = downloadchoose.GetPath()
++            if dir is None:
++                return
++            self.OnDownloadDir(event, self.frame.np.encode(dir))
++
++    def OnDownloadFile(self,event, absolutedir=""):
+         """ Get selected files """
+ 	item = -1
+ 	while 1:
+             item = self.listctrl.GetNextItem(item,wxLIST_NEXT_ALL,wxLIST_STATE_SELECTED|wxLIST_STATE_FOCUSED)
+             if item == -1:
+                 break
+-            self.transfers.getFile(self.user,self.listctrl.dir+'\\'+self.listctrl.list[item][1])
++            self.transfers.getFile(self.user,self.listctrl.dir+'\\'+self.listctrl.list[item][1], absolutedir)
++
++    def OnDownloadTo(self,event):
++        """ Ask for destination dir and get selected files """
++        downloadchoose = wxDirDialog(self)
++        val = downloadchoose.ShowModal()
++        if val == wxID_OK:
++            dir = downloadchoose.GetPath()
++            if dir is None:
++                return
++            self.OnDownloadFile(event, self.frame.np.encode(dir))
+ 
+     def UpdateGauge(self,msg):
+         """ If the filelist is long, this is handy"""
+@@ -509,3 +561,31 @@
+ 	    list.extend(self.FindNodes(node[i][1],text))
+ 	return list
+ 		
++    def OnRecDownloadDir(self,event):
++        """ Download directory recursively """
++        self.RecDownloadDir(self.curtreeitem)
++
++    def RecDownloadDir(self,item, path = ""):
++        """ Download directory recursively """
++        import os
++        (dir, flist) = self.tree.GetPyData(item)
++        ldir = string.split(dir,'\\')[-1]   # local directory
++        ldir = os.path.join(path,ldir)
++        for i in flist:                     # Get the files in this dir
++            self.transfers.getFile(self.user, dir+'\\'+i[1], ldir)
++
++        if self.tree.ItemHasChildren(item): # Get the other dirs
++            i, cookie = self.tree.GetFirstChild(item, 0)
++            while i.IsOk():
++                self.RecDownloadDir(i, ldir)
++                i, cookie = self.tree.GetNextChild(item, cookie)
++
++    def OnRecDownloadDirTo(self,event):
++        """ Ask for destination dir and get directory """
++        downloadchoose = wxDirDialog(self)
++        val = downloadchoose.ShowModal()
++        if val == wxID_OK:
++            dir = downloadchoose.GetPath()
++            if dir is None:
++                return
++            self.RecDownloadDir(self.curtreeitem, self.frame.np.encode(dir))
+diff -rNu3 pyslsk-1.2.2/pysoulseek/wxgui/userlist.py slsk-tmp/pysoulseek/wxgui/userlist.py
+--- pyslsk-1.2.2/pysoulseek/wxgui/userlist.py	2003-05-04 18:09:14.000000000 +0200
++++ slsk-tmp/pysoulseek/wxgui/userlist.py	2003-06-24 02:46:31.000000000 +0200
+@@ -17,6 +17,7 @@
+ import locale
+ from sortablelist import sortableListCtrl
+ from wxPython.wx import *
++from pysoulseek.utils import Humanize
+ 
+ 
+ class UserListPanel(wxPanel): 
+@@ -193,9 +194,9 @@
+         if col == 0:
+             return user[0]
+ 	elif col == 1:
+-	    return locale.format("%s",user[1],1)
++ 	    return Humanize(user[1],self.parent.frame.np.config.sections["ui"]["decimalsep"])
+ 	elif col == 2:
+-	    return locale.format("%s",user[2],1)
++	    return Humanize(user[2],self.parent.frame.np.config.sections["ui"]["decimalsep"])
+ 	elif col == 3:
+ 	    return user[3]
+         else:

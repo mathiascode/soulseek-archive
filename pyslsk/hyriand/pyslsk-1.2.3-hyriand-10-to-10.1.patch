@@ -1,0 +1,53 @@
+diff -rNu3 slsk-tmp1/pysoulseek/utils.py slsk-tmp2/pysoulseek/utils.py
+--- slsk-tmp1/pysoulseek/utils.py	2003-07-23 22:40:47.000000000 +0200
++++ slsk-tmp2/pysoulseek/utils.py	2003-07-23 22:40:47.000000000 +0200
+@@ -9,7 +9,7 @@
+ import os,dircache
+ import mp3
+ 
+-version = "1.2.3-hyriand-10"
++version = "1.2.3-hyriand-10.1"
+ 
+ def getServerList(url):
+         """ Parse server text file from http://www.slsk.org and 
+diff -rNu3 slsk-tmp1/pysoulseek/wxgui/userinfobrowse.py slsk-tmp2/pysoulseek/wxgui/userinfobrowse.py
+--- slsk-tmp1/pysoulseek/wxgui/userinfobrowse.py	2003-07-23 22:40:47.000000000 +0200
++++ slsk-tmp2/pysoulseek/wxgui/userinfobrowse.py	2003-07-23 22:40:47.000000000 +0200
+@@ -17,6 +17,9 @@
+ from sortablelist import sortableListCtrl
+ from wxPython.wx import *
+ import locale
++from pysoulseek.utils import Humanize
++import string
++import os
+ 
+ class UserNotebook(notebook.IconNotebook):
+     """ This is a notebook with user's information. Used to show either
+@@ -459,14 +462,24 @@
+         """ On selection of a tree item, display the filelist"""
+         self.listctrl.SetFileList(self.tree.GetPyData(event.GetItem()))
+ 
+-    def OnDownloadDir(self,event):
++    def OnDownloadDir(self,event, prefix=""):
+         """ Get every file in the directory """
+         import string
+-        dir = string.split(self.listctrl.dir,'\\')[-1]
++        dir = os.path.join(prefix, string.split(self.listctrl.dir,'\\')[-1])
+         for i in self.listctrl.list:
+             self.transfers.getFile(self.user, self.listctrl.dir+'\\'+i[1], dir)
+ 
+-    def OnDownloadFile(self,event):
++    def OnDownloadDirTo(self,event):
++        """ Ask for destination dir and get directory """
++        downloadchoose = wxDirDialog(self)
++        val = downloadchoose.ShowModal()
++        if val == wxID_OK:
++            dir = downloadchoose.GetPath()
++            if dir is None:
++                return
++            self.OnDownloadDir(event, self.frame.np.encode(dir))
++
++    def OnDownloadFile(self,event, absolutedir=""):
+         """ Get selected files """
+ 	item = -1
+ 	while 1:

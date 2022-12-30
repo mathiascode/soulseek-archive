@@ -1,0 +1,117 @@
+diff -rNu3 slsk-tmp1/pysoulseek/transfers.py slsk-tmp2/pysoulseek/transfers.py
+--- slsk-tmp1/pysoulseek/transfers.py	2003-05-19 19:25:40.000000000 +0200
++++ slsk-tmp2/pysoulseek/transfers.py	2003-05-19 19:25:40.000000000 +0200
+@@ -467,7 +467,10 @@
+ 		if i.transfertimer is not None:
+                     i.transfertimer.cancel()
+                 if not incompletedir:
+-                    incompletedir = os.path.join(downloaddir, i.path)
++                    if i.path and i.path[0] == '/':
++                        incompletedir = i.path
++                    else:
++                        incompletedir = os.path.join(downloaddir, i.path)
+ 		try:
+ 		    if not os.access(incompletedir,os.F_OK):
+ 		        os.makedirs(incompletedir)
+@@ -563,7 +566,10 @@
+ 		            msg.file.close()
+ 			    basename = string.split(i.filename,'\\')[-1]
+ 			    downloaddir = self.eventprocessor.config.sections["transfers"]["downloaddir"]
+-			    folder = os.path.join(downloaddir, i.path)
++			    if i.path and i.path[0] == '/':
++			        folder = i.path
++			    else:
++			        folder = os.path.join(downloaddir, i.path)
+ 		            if not os.access(folder,os.F_OK):
+ 			        os.makedirs(folder)
+ 			    newname = self.getRenamed(os.path.join(folder, basename))
+diff -rNu3 slsk-tmp1/pysoulseek/utils.py slsk-tmp2/pysoulseek/utils.py
+--- slsk-tmp1/pysoulseek/utils.py	2003-05-19 19:25:40.000000000 +0200
++++ slsk-tmp2/pysoulseek/utils.py	2003-05-19 19:25:40.000000000 +0200
+@@ -9,7 +9,7 @@
+ import os,dircache
+ import mp3
+ 
+-version = "1.2.0-hyriand-2.2"
++version = "1.2.0-hyriand-3"
+ 
+ def getServerList(url):
+         """ Parse server text file from http://www.slsk.org and 
+diff -rNu3 slsk-tmp1/pysoulseek/wxgui/search.py slsk-tmp2/pysoulseek/wxgui/search.py
+--- slsk-tmp1/pysoulseek/wxgui/search.py	2003-05-19 19:25:40.000000000 +0200
++++ slsk-tmp2/pysoulseek/wxgui/search.py	2003-05-19 19:25:40.000000000 +0200
+@@ -278,6 +278,9 @@
+         downloadID=wxNewId()
+         self.menu.Append(downloadID, 'Download File(s)')
+         EVT_MENU(self,downloadID, self.OnDownload)
++        downloadToID=wxNewId()
++        self.menu.Append(downloadToID, 'Download File(s) to...')
++        EVT_MENU(self,downloadToID, self.OnDownloadTo)
+         downloadfolderID=wxNewId()
+         self.menu.Append(downloadfolderID, 'Download Containing Folder')
+         EVT_MENU(self,downloadfolderID, self.OnDownloadFolder)
+@@ -338,13 +341,22 @@
+         self.frame.np.queue.put(slskmessages.GetPeerAddress(self.selecteduser))
+ 
+ 
+-    def OnDownload(self, event):
++    def OnDownload(self, event, path = ""):
+         item = -1
+         while 1:
+             item = self.GetNextItem(item,wxLIST_NEXT_ALL,wxLIST_STATE_SELECTED|wxLIST_STATE_FOCUSED)
+             if item == -1:
+                 break
+-            self.transfers.getFile(self.results_visible[item][2],self.results_visible[item][9]+self.results_visible[item][1])
++            self.transfers.getFile(self.results_visible[item][2],self.results_visible[item][9]+self.results_visible[item][1],path )
++
++    def OnDownloadTo(self, event):
++        downloadchoose = wxDirDialog(self)
++        val = downloadchoose.ShowModal()
++        if val == wxID_OK:
++            dir = downloadchoose.GetPath()
++            if dir is None:
++                return
++            self.OnDownload(event, dir)
+ 
+     def OnDownloadFolder(self,event):
+         self.processrequest(self.selecteduser, slskmessages.FolderContentsRequest(None,self.results_visible[self.id][9]))
+diff -rNu3 slsk-tmp1/pysoulseek/wxgui/userinfobrowse.py slsk-tmp2/pysoulseek/wxgui/userinfobrowse.py
+--- slsk-tmp1/pysoulseek/wxgui/userinfobrowse.py	2003-05-19 19:25:40.000000000 +0200
++++ slsk-tmp2/pysoulseek/wxgui/userinfobrowse.py	2003-05-19 19:25:40.000000000 +0200
+@@ -351,6 +351,9 @@
+         downloadfileID=wxNewId()
+         self.listmenu.Append(downloadfileID, 'Download File(s)')
+         EVT_MENU(self.listctrl,downloadfileID, self.OnDownloadFile)
++        downloadtoID=wxNewId()
++        self.listmenu.Append(downloadtoID, 'Download to...')
++        EVT_MENU(self.listctrl,downloadtoID, self.OnDownloadTo)
+         self.treemenu.AppendSeparator()
+         self.listmenu.AppendSeparator()
+         sendmessageID=wxNewId()
+@@ -447,14 +450,24 @@
+         for i in self.listctrl.list:
+             self.transfers.getFile(self.user, self.listctrl.dir+'\\'+i[1], dir)
+ 
+-    def OnDownloadFile(self,event):
++    def OnDownloadFile(self,event, absolutedir=""):
+         """ Get selected files """
+ 	item = -1
+ 	while 1:
+             item = self.listctrl.GetNextItem(item,wxLIST_NEXT_ALL,wxLIST_STATE_SELECTED|wxLIST_STATE_FOCUSED)
+             if item == -1:
+                 break
+-            self.transfers.getFile(self.user,self.listctrl.dir+'\\'+self.listctrl.list[item][1])
++            self.transfers.getFile(self.user,self.listctrl.dir+'\\'+self.listctrl.list[item][1], absolutedir)
++
++    def OnDownloadTo(self,event):
++        """ Ask for destination dir and get selected files """
++        downloadchoose = wxDirDialog(self)
++        val = downloadchoose.ShowModal()
++        if val == wxID_OK:
++            dir = downloadchoose.GetPath()
++            if dir is None:
++                return
++            self.OnDownloadFile(event, dir)
+ 
+     def UpdateGauge(self,msg):
+         """ If the filelist is long, this is handy"""

@@ -1,0 +1,172 @@
+------------------------------------------------------------------------
+r26 | seeschloss | 2005-04-24 15:48:19 +0200 (Sun, 24 Apr 2005) | 3 lines
+
+Updated the README
+
+
+------------------------------------------------------------------------
+r25 | seeschloss | 2005-04-24 14:58:55 +0200 (Sun, 24 Apr 2005) | 4 lines
+
+Better soulsetup
+Many changes to the Makefile
+
+
+------------------------------------------------------------------------
+r24 | seeschloss | 2005-04-24 03:18:42 +0200 (Sun, 24 Apr 2005) | 3 lines
+
+Added soulsetup, Soulfind's configuration tool
+
+
+------------------------------------------------------------------------
+r23 | seeschloss | 2005-04-24 01:46:21 +0200 (Sun, 24 Apr 2005) | 4 lines
+
+Default database path is now /var/db/soulfind/soulfind.db
+Updated README
+
+
+------------------------------------------------------------------------
+r22 | seeschloss | 2005-04-24 01:18:30 +0200 (Sun, 24 Apr 2005) | 6 lines
+
+Cleaned the database code
+Database now also holds configuration data, and the list of admins
+Added limiting of the number of offline PMs
+Updated the README
+
+
+------------------------------------------------------------------------
+r21 | seeschloss | 2005-04-23 14:20:42 +0200 (Sat, 23 Apr 2005) | 4 lines
+
+Added "message <message>" admin command
+ (sends a global message to all users)
+
+
+------------------------------------------------------------------------
+r20 | seeschloss | 2005-04-23 14:07:24 +0200 (Sat, 23 Apr 2005) | 3 lines
+
+admin commands kill <user> and killall working again
+
+
+------------------------------------------------------------------------
+r19 | seeschloss | 2005-04-23 13:48:32 +0200 (Sat, 23 Apr 2005) | 3 lines
+
+Cleaned the way server commands are handled
+
+
+------------------------------------------------------------------------
+r18 | seeschloss | 2005-04-23 13:04:40 +0200 (Sat, 23 Apr 2005) | 3 lines
+
+Added "info <user>" admin command after daelstorm's suggestion
+
+
+------------------------------------------------------------------------
+r17 | seeschloss | 2005-04-23 12:24:54 +0200 (Sat, 23 Apr 2005) | 3 lines
+
+PMs are now handled cleanly
+
+
+------------------------------------------------------------------------
+r16 | seeschloss | 2005-04-23 11:49:30 +0200 (Sat, 23 Apr 2005) | 4 lines
+
+Offline PMs now work.
+Removed a useless comment in server.d
+
+
+------------------------------------------------------------------------
+r15 | seeschloss | 2005-04-22 22:06:42 +0200 (Fri, 22 Apr 2005) | 7 lines
+
+Replaced Sdb's set_user with update_field (updating the
+ whole user when only one field has changed is stupid).
+
+Replaced Sdb's string concatenations with std.string.format ()
+ (should be a bit faster, and doesn't need toString ())
+
+
+------------------------------------------------------------------------
+r14 | seeschloss | 2005-04-21 21:29:29 +0200 (Thu, 21 Apr 2005) | 3 lines
+
+Fixes to the README
+
+
+------------------------------------------------------------------------
+r13 | seeschloss | 2005-04-21 21:26:23 +0200 (Thu, 21 Apr 2005) | 3 lines
+
+bin is already created by the Makefile (and it is also cleaned, now)
+
+
+------------------------------------------------------------------------
+r12 | seeschloss | 2005-04-21 21:02:52 +0200 (Thu, 21 Apr 2005) | 4 lines
+
+Fixed the addprivileges admin command
+Privileges are now stored in the database
+
+
+------------------------------------------------------------------------
+r11 | seeschloss | 2005-04-19 19:26:13 +0200 (Tue, 19 Apr 2005) | 3 lines
+
+Removed obsolete "synchronized" statements
+
+
+------------------------------------------------------------------------
+r10 | seeschloss | 2005-03-29 13:35:21 +0200 (Tue, 29 Mar 2005) | 4 lines
+
+Use sqlite3_column_count instead of sqlite3_data_count
+Corrected Makefile
+
+
+------------------------------------------------------------------------
+r9 | seeschloss | 2005-03-21 20:52:46 +0100 (Mon, 21 Mar 2005) | 3 lines
+
+Added a small comment...
+
+
+------------------------------------------------------------------------
+r8 | seeschloss | 2005-03-19 23:42:19 +0100 (Sat, 19 Mar 2005) | 5 lines
+
+Replaced build.sh with a Makefile
+Updated README
+Added some exception handling to server.d
+
+
+------------------------------------------------------------------------
+r7 | seeschloss | 2005-03-17 23:04:07 +0100 (Thu, 17 Mar 2005) | 3 lines
+
+Disconnect users who send bogus messages
+
+
+------------------------------------------------------------------------
+r6 | seeschloss | 2005-03-17 22:19:30 +0100 (Thu, 17 Mar 2005) | 3 lines
+
+Disconnect client who send bogus data, instead of crashing when trying to read it anyway
+
+
+------------------------------------------------------------------------
+r5 | seeschloss | 2005-03-03 16:42:21 +0100 (Thu, 03 Mar 2005) | 3 lines
+
+Fixed the DB not adding new users (toString (false) returns "false" and not "0")
+
+
+------------------------------------------------------------------------
+r4 | seeschloss | 2005-03-03 14:57:06 +0100 (Thu, 03 Mar 2005) | 3 lines
+
+Coloured output is easier to read
+
+
+------------------------------------------------------------------------
+r3 | seeschloss | 2005-03-03 13:32:24 +0100 (Thu, 03 Mar 2005) | 5 lines
+
+Added basic support for recommendations
+Fixed DB query problem
+Fixed server answering admin commands as ">" instead of "server"
+
+
+------------------------------------------------------------------------
+r2 | seeschloss | 2005-02-06 14:15:05 +0100 (Sun, 06 Feb 2005) | 2 lines
+
+Removed vim swap files...
+
+------------------------------------------------------------------------
+r1 | seeschloss | 2005-02-06 14:13:59 +0100 (Sun, 06 Feb 2005) | 2 lines
+
+Initial import
+
+------------------------------------------------------------------------

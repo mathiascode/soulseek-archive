@@ -1,0 +1,60 @@
+diff -rNu3 slsk-tmp1/pysoulseek/config.py slsk-tmp2/pysoulseek/config.py
+--- slsk-tmp1/pysoulseek/config.py	2003-05-28 01:33:56.000000000 +0200
++++ slsk-tmp2/pysoulseek/config.py	2003-05-28 01:33:56.000000000 +0200
+@@ -41,7 +41,7 @@
+ 	"wordindex":{},"fileindex":{},"sharedmtimes":{},"rescanonstartup":0}, \
+ 	"userinfo":{"descr":"''","pic":""},"logging": \
+ 	{"logsdir":os.path.expanduser("~"),"privatechat":0,"chatrooms":0}, \
+-	"searches":{"maxresults":50,"re_filter":False}, \
++	"searches":{"maxresults":50,"re_filter":0}, \
+  	"ui":{"chatme":"FOREST GREEN", "chatremote":"","chatlocal":"BLUE", \
+  	"chathilite":"", "search":"","searchq":"GREY", "decimalsep":","}}
+ 
+diff -rNu3 slsk-tmp1/pysoulseek/transfers.py slsk-tmp2/pysoulseek/transfers.py
+--- slsk-tmp1/pysoulseek/transfers.py	2003-05-28 01:33:56.000000000 +0200
++++ slsk-tmp2/pysoulseek/transfers.py	2003-05-28 01:33:56.000000000 +0200
+@@ -909,7 +909,7 @@
+ #                self.uploadspanel.update()
+ 
+ 
+-    def AbortTransfer(self,transfer, remove = False):
++    def AbortTransfer(self,transfer, remove = 0):
+ 	if transfer.conn is not None:
+             self.queue.put(slskmessages.ConnClose(transfer.conn))
+ 	    transfer.conn = None
+diff -rNu3 slsk-tmp1/pysoulseek/utils.py slsk-tmp2/pysoulseek/utils.py
+--- slsk-tmp1/pysoulseek/utils.py	2003-05-28 01:33:56.000000000 +0200
++++ slsk-tmp2/pysoulseek/utils.py	2003-05-28 01:33:56.000000000 +0200
+@@ -9,7 +9,7 @@
+ import os,dircache
+ import mp3
+ 
+-version = "1.2.0-hyriand-3"
++version = "1.2.0-hyriand-3.1"
+ 
+ def getServerList(url):
+         """ Parse server text file from http://www.slsk.org and 
+diff -rNu3 slsk-tmp1/pysoulseek/wxgui/search.py slsk-tmp2/pysoulseek/wxgui/search.py
+--- slsk-tmp1/pysoulseek/wxgui/search.py	2003-05-28 01:33:56.000000000 +0200
++++ slsk-tmp2/pysoulseek/wxgui/search.py	2003-05-28 01:33:56.000000000 +0200
+@@ -471,7 +471,7 @@
+ 		immdownload = ""
+             self.results.append([len(self.results)+1,name,user,size,msg.ulspeed,msg.inqueue,immdownload,bitrate,length,dir,br])
+             if self.checkFilter(filters, name, size, br, immdownload):
+-                self.results_visible.append([len(self.results)+1,name,user,size,msg.ulspeed,msg.inqueue,immdownload,bitrate,length,dir,br])
++                self.results_visible.append([len(self.results),name,user,size,msg.ulspeed,msg.inqueue,immdownload,bitrate,length,dir,br])
+                 results += 1
+ 	if results and self.sortcol != -1:
+ 	    self.SortList(self.sortcol, self.sortorder)
+diff -rNu3 slsk-tmp1/pysoulseek/wxgui/userinfobrowse.py slsk-tmp2/pysoulseek/wxgui/userinfobrowse.py
+--- slsk-tmp1/pysoulseek/wxgui/userinfobrowse.py	2003-05-28 01:33:56.000000000 +0200
++++ slsk-tmp2/pysoulseek/wxgui/userinfobrowse.py	2003-05-28 01:33:56.000000000 +0200
+@@ -467,7 +467,7 @@
+             dir = downloadchoose.GetPath()
+             if dir is None:
+                 return
+-            self.OnDownloadFile(event, dir)
++            self.OnDownloadFile(event, self.frame.np.encode(dir))
+ 
+     def UpdateGauge(self,msg):
+         """ If the filelist is long, this is handy"""

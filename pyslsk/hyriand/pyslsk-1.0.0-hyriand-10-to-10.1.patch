@@ -1,0 +1,43 @@
+diff -rNu3 slsk-tmp1/pysoulseek/utils.py slsk-tmp2/pysoulseek/utils.py
+--- slsk-tmp1/pysoulseek/utils.py	2003-03-13 00:30:24.000000000 +0100
++++ slsk-tmp2/pysoulseek/utils.py	2003-03-13 00:30:24.000000000 +0100
+@@ -76,11 +76,13 @@
+                 if olddir.has_key(f) and olddir[f][4] == mtime:
+                     list[dir].append(olddir[f])
+                 else:
+-                    list[dir].append(getFileInfo(f,pathname,mtime))
++                    list[dir].append(getFileInfo(f,pathname))
+     return list
+ 
+-def getFileInfo(name, pathname, mtime):
+-    size = os.stat(pathname)[stat.ST_SIZE]   
++def getFileInfo(name, pathname):
++    filestat = os.stat(pathname)
++    size = filestat[stat.ST_SIZE]
++    mtime = filestat[stat.ST_MTIME]
+     if name[-4:] == ".mp3" or name[-4:] == ".MP3":
+ 	mp3info=mp3.detect_mp3(pathname)
+         if mp3info:
+@@ -97,7 +99,7 @@
+ 	    vf = ogg.vorbis.VorbisFile(pathname)
+ 	    time = int(vf.time_total(0))
+ 	    bitrate = vf.bitrate(0)/1000
+-	    fileinfo = (name,size, (bitrate,0), time,mtime)
++	    fileinfo = (name,size, (bitrate,0), time, mtime)
+ 	except:
+ 	    fileinfo = (name,size,None,None,mtime)
+     else:
+diff -rNu3 slsk-tmp1/pysoulseek/wxgui/userinfobrowse.py slsk-tmp2/pysoulseek/wxgui/userinfobrowse.py
+--- slsk-tmp1/pysoulseek/wxgui/userinfobrowse.py	2003-03-13 00:30:24.000000000 +0100
++++ slsk-tmp2/pysoulseek/wxgui/userinfobrowse.py	2003-03-13 00:30:24.000000000 +0100
+@@ -365,10 +365,6 @@
+         self.treemenu.Append(sendmessageID, 'Send Message')
+         self.listmenu.Append(sendmessageID, 'Send Message')
+         EVT_MENU(self,sendmessageID, self.OnSendMessage)
+-        showIp=wxNewId()
+-        self.treemenu.Append(showIp, 'Show IP')
+-        self.listmenu.Append(showIp, 'Show IP')
+-        EVT_MENU(self,showIp, self.OnShowIp)
+         getinfoID=wxNewId()
+         self.treemenu.Append(getinfoID, 'Get User Info')
+         self.listmenu.Append(getinfoID, 'Get User Info')

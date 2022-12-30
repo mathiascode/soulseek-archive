@@ -1,0 +1,307 @@
+<html>
+<head>
+<title>Hyriand's UNOFFICIAL PySoulSeek patches</title>
+</head>
+<body>
+<center><h2>Hyriand's UNOFFICIAL PySoulSeek patches</h2>
+Welcome to this page. Here you can download my unofficial PySoulSeek patches.
+Please remember that I am not related to the
+<a href="http://www.sensi.org/~ak/pyslsk/" target="_blank">official PySoulSeek
+project</a>. Also, I cannot be held responsible for any damage these patches
+(or anything else for that matter) inflict on you, your system, your files
+or whatever you want to blame me of.<br>
+&nbsp;<br>
+These patches are licensed under the GNU General Public License [<a
+href="http://www.gnu.org/licenses/gpl.html" target="_blank">HTML</a>] [<a
+href="http://www.gnu.org/licenses/gpl.txt" target="_blank">PlainText</a>]
+</center><br>
+<hr>
+<h3>Credits:</h3>
+<ul>
+<li><b>SmackleFunky</b> for his poetry-like patch that added remembered
+searches (which, slightly modified, turned into autosearch), ignoring and
+PM history. Fall down on your knees and praise the all-mighty SmackleFunky!
+<li><b>Wretched</b>, <b>daelstorm</b> and <b>anadyr</b> for sacrificing
+themselves and their computers to test my patches before you get them and
+giving me hints and tips on stuff I should (not) do. You should also thank
+or curse Wretched for the search filter help :-)
+<li><b>geertk</b> for his excellent recursive directory and hostname lookup
+patches (although the reverse lookup has been introduced in pyslsk-1.0.0 as
+a standard feature) and the how-to-apply-a-patch mini-guide.
+<li><b>ddbsa</b> for his excellent search filtering patch
+<li><b>alexbk</b> for creating pyslsk, and keeping me sharp by making sure
+lots of hunks of my patch fail against any new release.
+</ul>
+<hr>
+&nbsp;<br>
+Latest PySoulSeek release: <a
+href="pyslsk-1.0.4.tar.gz">1.0.4</a>
+(<a href="pyslsk-1.0.4-changelog" target="_blank">ChangeLog</a>)
+(locally mirrored)<br>
+&nbsp;<br>
+Download the latest version of my patch:
+<a href="pyslsk-1.0.4-hyriand-13.patch">version 13</a><br>
+&nbsp;<br>
+<b><a href="#howto">---&gt; How to apply a patch</a></b><br>
+&nbsp;<br>
+<b>Incremental patches</b><br>
+<a href="pyslsk-1.0.4-hyriand-12.8-to-13.patch">pyslsk-1.0.4-hyriand-12.8-to-13.patch<a>
+updated pyslsk-1.0.4 with my patch version 12.8 to version 13<br>
+&nbsp;<br>
+<a href="pyslsk-1.0.0-hyriand-11-to-12.patch">pyslsk-1.0.0-hyriand-11-to-12.patch<a>
+updated pyslsk-1.0.0 with my patch version 11 to version 12<br>
+<a href="pyslsk-1.0.0-hyriand-10.2-to-11.patch">pyslsk-1.0.0-hyriand-10.2-to-11.patch<a>
+updated pyslsk-1.0.0 with my patch version 10.2 to version 11<br>
+<a href="pyslsk-1.0.0-hyriand-10.1-to-10.2.patch">pyslsk-1.0.0-hyriand-10.1-to-10.2.patch<a>
+updated pyslsk-1.0.0 with my patch version 10.1 to version 10.2<br>
+<a href="pyslsk-1.0.0-hyriand-10-to-10.1.patch">pyslsk-1.0.0-hyriand-10-to-10.1.patch<a>
+updated pyslsk-1.0.0 with my patch version 10 to version 10.1<br>
+<a href="pyslsk-1.0.0pre5a-hyriand-8-to-9.patch">pyslsk-1.0.0pre5a-hyriand-8-to-9.patch<a>
+updated pyslsk-1.0.0pre5a with my patch version 8 to version 9<br>
+<a href="pyslsk-1.0.0pre5a-hyriand-7.1-to-8.patch">pyslsk-1.0.0pre5a-hyriand-7.1-to-8.patch<a>
+updated pyslsk-1.0.0pre5a with my patch version 7.1 to version 8<br>
+<a href="pyslsk-1.0.0pre5a-hyriand-7-to-7.1.patch">pyslsk-1.0.0pre5a-hyriand-7-to-7.1.patch<a>
+updated pyslsk-1.0.0pre5a with my patch version 7 to version 7.1<br>
+<a href="pyslsk-1.0.0pre5a-hyriand-6-to-7.1.patch">pyslsk-1.0.0pre5a-hyriand-6-to-7.1.patch<a>
+updated pyslsk-1.0.0pre5a with my patch version 6 to version 7.1<br>
+&nbsp;<br>
+<b>Old patches</b><br>
+<a href="pyslsk-1.0.4-hyriand-12.8.patch">version 12.8</a> for pyslsk-1.0.4<br>
+<a href="pyslsk-1.0.3-hyriand-12.7.patch">version 12.7</a> for pyslsk-1.0.3<br>
+<a href="pyslsk-1.0.2-hyriand-12.6.patch">version 12.6</a> for pyslsk-1.0.2<br>
+<a href="pyslsk-1.0.1-hyriand-12.5.patch">version 12.5</a> for pyslsk-1.0.1<br>
+<a href="pyslsk-1.0.0-hyriand-12.patch">version 12</a> for pyslsk-1.0.0<br>
+<a href="pyslsk-1.0.0-hyriand-11.patch">version 11</a> for pyslsk-1.0.0<br>
+<a href="pyslsk-1.0.0-hyriand-10.2.patch">version 10.2</a> for pyslsk-1.0.0<br>
+<a href="pyslsk-1.0.0-hyriand-10.1.patch">version 10.1</a> for pyslsk-1.0.0<br>
+<a href="pyslsk-1.0.0-hyriand-10.patch">version 10</a> for pyslsk-1.0.0<br>
+<a href="pyslsk-1.0.0pre5a-hyriand-9.patch">version 9</a> for pyslsk-1.0.0pre5a<br>
+<a href="pyslsk-1.0.0pre5a-hyriand-8.patch">version 8</a> for pyslsk-1.0.0pre5a<br>
+<a href="pyslsk-1.0.0pre5a-hyriand-7.1.patch">version 7.1</a> for pyslsk-1.0.0pre5a<br>
+<a href="pyslsk-1.0.0pre5a-hyriand-7.patch">version 7</a> for
+pyslsk-1.0.0pre5a<br>
+<a href="pyslsk-1.0.0pre5a-hyriand-6.patch">version 6</a> for
+pyslsk-1.0.0pre5a<br>
+<a href="pyslsk-1.0.0pre3-hyriand-5.patch">version 5</a> for
+pyslsk-1.0.0pre3 and pyslsk-1.0.0pre4<br>
+<a href="pyslsk-1.0.0pre3-hyriand-4.1.patch">version 4.1</a> for
+pyslsk-1.0.0pre3<br>
+<a href="pyslsk-1.0.0pre2-hyriand-4.1.patch">version 4.1</a> for
+pyslsk-1.0.0pre2<br>
+<a href="pyslsk-1.0.0pre2-hyriand-4.patch">version 4</a> for
+pyslsk-1.0.0pre2<br>
+<a href="pyslsk-1.0.0pre2-hyriand-3.patch">version 3</a> for
+pyslsk-1.0.0pre2<br>
+<a href="pyslsk-1.0.0pre2-hyriand-2.patch">version 2</a> for
+pyslsk-1.0.0pre2<br>
+<a href="pyslsk-1.0.0pre2-hyriand-1.patch">version 1</a> for
+pyslsk-1.0.0pre2<br>
+&nbsp;<br>
+<hr>
+<h3>Added features</h3>
+<ul>
+<li>Auto-search. Hint: check the "remember" box
+<li>Ignoring users (in chats and PM's) (<b>/ignore /unignore</b> and settings
+dialog)
+<li>PM history (will show the last 15 lines of a conversation if loggin is
+enabled)
+<li>Search filtering (see new help screen)
+<li>Buttons on the user info are placed nicer
+<li>Set a fixed number of upload slots (optional of course)
+<li>Recursive directory downloading (thanks to geertk)
+<li>Command aliasing.. Create your own / commands. See below for syntaxis
+<li>GB/MB/KB filesizes in the transfers list
+<li>Locale-independant decimal separators
+<li>Configurable text colours for chats and search results
+<li>Allow people on your user list to be scheduled for uploads ahead of
+regular users (see the transfers tab in the settings dialog)
+</ul>
+<hr>
+<h3>Command aliasing</h3>
+This patch will allow you to create your own / commands.<br>
+&nbsp;<br>
+Examples:<br>
+<b>/alias np np: |(cat /tmp/xmms-info | grep "Title: " | sed "s/Title: //")</b><br>
+This will create a new /np command which you can use in chat
+windows. It will parse the XMMS Info-Pipe plugin file. And
+show something like <b>np: Ivory Frequency - Dancing Troops</b><br>
+&nbsp;<br>
+<b>/alias slap /me slaps $(1) with $(2:)</b><br>
+This will create a new /slap command. $(1) means "first
+parameter after the command",  $(2:) means "second parameter
+and everything after that". So <b>/slap hyriand a cannonball</b>
+would be expanded to <b>/me slaps hyriand with a cannonball</b>.<br>
+&nbsp;<br>
+<b>/alias slap /me slaps $(1=himself) with $(2:=a cannonball)</b><br>
+Same as above, but with default values for the parameters...<br>
+&nbsp;<br>
+<b>/alias run |($@)</b><br>
+Inside a pipe |( ), you can use $@ to be expanded to all arguments
+given to the /command.. So <b>/run uptime</b> will print your
+current uptime to the chat. You can also use $1, $2, etc...<br>
+&nbsp;<br>
+To display all aliases currently configured, type:<br>
+<b>/alias</b><br>
+To show the definition of the "slap" alias, type:<br>
+<b>/alias slap</b><br>
+To delete the "slap" alias, type:<br>
+<b>/unalias slap</b><br>
+&nbsp;<br>
+<hr>
+<h3>New in version 13</h3>
+<ul>
+<li>Auto-search (based on a patch by SmackleFunky)
+<li>Ignoring users in chats and PMs (patch by SmackleFunky)
+<li>PM history (patch by SmackleFunky)
+<li>Small bugfix: bluebird won't be shown for filtered out results anymore
+</ul>
+<h3>New in version 12.8</h3>
+<ul>
+<li>Other small bug/glitch-fixes
+<li>Small bugfix in get-place-in-queue function concerning "prefer friends"
+<li>Synced with pyslsk-1.0.4
+</ul>
+<h3>New in version 12.7</h3>
+<ul>
+<li>Synced with pyslsk-1.0.3
+</ul>
+<h3>New in version 12.6</h3>
+<ul>
+<li>Synced with pyslsk-1.0.2
+</ul>
+<h3>New in version 12.5</h3>
+<ul>
+<li>Bugfix: Replaced .Disable() to .Enable(0) for compatibility with wxPython
+2.4.0.2
+<li>Upgrade: Upgraded to pyslsk-1.0.1
+<li>New: Status indicator on the statusbar
+<li>Bugfix: A small bugfix in /search for PMs
+</ul>
+<h3>New in version 12</h3>
+<ul>
+<li>New: Room and buddy list seaches
+<li>New: Configurable client-port range
+<li>Small fixes here and there..
+</ul>
+<h3>New in version 11</h3>
+<ul>
+<li>New: Patch version visible in about screen
+<li>New: Direct user searching (p2p searching)
+<li>New: Search filtering (based on the work of ddbsa)
+</ul>
+<h3>New in version 10.2</h3>
+<ul>
+<li>Bugfix: small bug introduced by alexbk fixed
+</ul>
+<h3>New in version 10.1</h3>
+<ul>
+<li>Bugfix: small user interface fix
+<li>Bugfix: small bug fixed caused by adaptive rescanning
+</ul>
+<h3>New in version 10</h3>
+<ul>
+<li>Faster rescanning due to mtime checking
+<li>Buttons on the user-info are placed a little different
+<li>Updated for pyslsk-1.0.0
+</ul>
+<h3>New in version 9</h3>
+<ul>
+<li>Buttons on the user-info rearranged, and a refresh button on the browse
+screens.
+<li>Re-ordered some of the pyslsk menu and added some "missing" options
+<li>Command aliasing.. See above for alias syntaxis
+<li>Fixed number of upload slots
+<li>Recursive directory download (bluntly stolen from geertk who made this patch for 0.4.11)
+</ul>
+<h3>New in version 8</h3>
+<ul>
+<li>Re-implemented the GB/MB/KB in the transfer lists
+<li>Implemented locale independant decimal separators
+<li>Bugfix: fixed some erratic yellow-bird behaviour
+</ul>
+<h3>New in version 7.1</h3>
+<ul>
+<li>Bugfix: forgot about some stuff in the browse code..
+</ul>
+<h3>New in version 7</h3>
+<ul>
+<li>The chat-tab and room-tabs will now have a yellow bird when your name
+was used.
+</ul>
+<h3>New in version 6.1</h3>
+<ul>
+<li>Bugfix: fixed a bug that caused a traceback when someone said your name
+in a private chat.
+<li>Bugfix: fixed a silly bug with username highlight in private chats.
+<li>Bugfix: fixed a bug that caused "Let people in my user list download
+first" not to work.
+</ul>
+<h3>New in version 6</h3>
+<ul>
+<li>Added highlighting of lines in chats if they contain your nickname (set
+'highlight color' option in the colours tab of the settings dialog to enable
+this)
+<li>Moved the "Let users in my list download first" option to the transfers
+tab (I just hope nobody uses 640x480 anymore)
+<li>Updated for pyslsk-1.0.0pre5a (removed banning, upload limiter, chat
+command, auto-completion and human readible numbers from the patch as these
+features are now available in the official pyslsk)
+</ul>
+<h3>New in version 5</h3>
+<ul>
+<li>Added even more human readible numbers (user browser, searches and user/room list)
+<li>Right aligned numbers (where applicable)
+<li>Implemented /search
+<li>Configurable text colours for chats and search results
+<li>Updated for pyslsk-1.0.0pre3
+<li>Small "stuff" and bug fixes not really worth mentioning
+</ul>
+<h3>New in version 4.1</h3>
+<ul>
+<li>Added the option to use a custom ban message
+<li>Added /ip to show someone's IP
+<li>Added "prefer uploading to friends" (see misc tab)
+<li>Added case insensitive sorting of user and room lists
+<li>Added /ban and /unban
+<li>Made the command helps look nicer
+<li>Tab auto-completion works in private chats (and completes current user)
+<li>Tab auto-completion now also completes from user list
+</ul>
+<h3>New in version 3</h3>
+<ul>
+<li>Added ban list
+<li>Added help for /commands
+<li>Patch should work with wxPython 2.3.3 now
+</ul>
+<a name="howto">
+<hr>
+<h3>Applying the patch</h3>
+1. When running from a source tarball:<br>
+<pre>
+cd /usr/local/src/pyslsk-1.0.0
+patch -p1 < /the/path/to/pyslsk-1.0.0-hyriand-X.patch
+</pre>
+And that's all.<br>
+&nbsp;<br>
+2. When running an installed version (e.g. rpm or deb):<br>
+&nbsp;<br>
+logged in as root do:<br>
+<pre>
+cd /usr/lib/python2.2/site-packages
+patch -p1 < /the/path/to/pyslsk-1.0.0-hyriand-X.patch
+</pre>
+When you patch a binary packaged version you might get 1 or 2 errors when
+applying then patch because patch can't find 2 files. You can safely ignore
+this.<br>
+&nbsp;<br>
+When that's done pyslsk should be started as root once to get the
+appropiate .pyc files in place.  You won't have permissions to generate
+them when not running as root.<br>
+&nbsp;<br>
+On <b>debian</b> the path will be "<b>/usr/lib/site-python</b>" instead
+of "/usr/lib/python2.2/site-packages" (Red Hat/Mandrake/Gentoo).<br>
+&nbsp;<br>
+<hr>
+<h6 align="right">All contents (C) 2003, Hyriand</h6>
+</body>
+</html>

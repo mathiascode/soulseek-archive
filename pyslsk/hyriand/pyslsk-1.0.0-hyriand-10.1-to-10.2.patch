@@ -1,0 +1,21 @@
+diff -rNu3 slsk-tmp1/pysoulseek/wxgui/chat.py slsk-tmp2/pysoulseek/wxgui/chat.py
+--- slsk-tmp1/pysoulseek/wxgui/chat.py	2003-03-13 00:52:08.000000000 +0100
++++ slsk-tmp2/pysoulseek/wxgui/chat.py	2003-03-13 00:52:08.000000000 +0100
+@@ -597,7 +597,7 @@
+             if rest:
+                 msg = "/me slaps %s with a %s" % (rest, random.choice("a large trout", "a dictionary", "a rubber duck", "a copy of Windows XP", "a glove", "an empty bottle", "a lawsuit", "a ddos", "google", "a herring"))
+                 self.queue.put(slskmessages.SayChatroom(self.room, msg))
+-        elif cmd[0] == "/" and cmd != "/me":
++        elif len(cmd) > 0 and cmd[0] == "/" and cmd != "/me":
+             wxLogMessage("Command %s is not recognized" %(text))
+ 	else:
+             self.queue.put(slskmessages.SayChatroom(self.room, text))
+@@ -895,7 +895,7 @@
+         elif cmd in ("/search", "/s"):
+             if truerest:
+                 self.parent.np.search.DoSearch(truerest)
+-	elif cmd[0] == "/" and cmd != "/me":
++	elif len(cmd) > 0 and cmd[0] == "/" and cmd != "/me":
+ 	    wxLogMessage("Command %s is not recognized" %(text))
+ 	else:
+             self.SendMessage(text)

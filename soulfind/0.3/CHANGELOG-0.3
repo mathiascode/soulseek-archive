@@ -1,0 +1,13 @@
+New since 0.2.11 :
+
+	- Now needs DMD >= 0.116 (still works with GDC 0.10, the build date just isn't recorded)
+	- MOTD not compiled in anymore but stored in the DB (can be changed with Soulsetup)
+	- Database now automatically updated if it uses an old format (no need to delete the file and lose everything...)
+	- New server message : ServerInfo (code 1789) returns a list of information on the server (version, number of total and online users)
+	- Added support for banning users from the server either with the server's admin functions or with Soulsetup
+	- Full support of recommendations
+	- Privileges are now updated (instead of being static)
+	- DB does not contain plain user passwords anymore, but base64 encoded md5sums of the passwords
+	- Unicode usernames still allowed, but 00-0F and 7F-9F control chars are refused, as well as 2000-200F separators and joiners, A0 (non-breaking space), and AD (soft hyphen)
+	- Name of the server (for administration) can now be changed with Soulsetup
+	- Cleaner output, configurable at compile time

@@ -1,0 +1,13 @@
+diff -rNu3 slsk-tmp1/pysoulseek/transfers.py slsk-tmp2/pysoulseek/transfers.py
+--- slsk-tmp1/pysoulseek/transfers.py	2003-05-18 10:49:30.000000000 +0200
++++ slsk-tmp2/pysoulseek/transfers.py	2003-05-18 10:49:30.000000000 +0200
+@@ -386,6 +386,9 @@
+     def transferNegotiating(self):
+ 	return len([i for i in self.uploads if i.req is not None or (i.conn is not None and i.speed is None) or i.status == 'Getting status']) > 0 #some file is being negotiated
+ 
++    def activeUploads(self):
++        return len([i for i in self.uploads if i.conn is not None and i.speed is not None])
++
+     def bandwidthLimitReached(self):
+ 	maxbandwidth = self.eventprocessor.config.sections["transfers"]["uploadbandwidth"]
+ 	maxupslots = self.eventprocessor.config.sections["transfers"]["uploadslots"]

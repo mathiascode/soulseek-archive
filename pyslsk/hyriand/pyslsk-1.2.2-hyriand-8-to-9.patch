@@ -1,0 +1,187 @@
+diff -rNu3 slsk-tmp1/pysoulseek/config.py slsk-tmp2/pysoulseek/config.py
+--- slsk-tmp1/pysoulseek/config.py	2003-07-13 12:48:42.000000000 +0200
++++ slsk-tmp2/pysoulseek/config.py	2003-07-13 12:48:42.000000000 +0200
+@@ -42,8 +42,10 @@
+ 	"wordindex":{},"fileindex":{},"sharedmtimes":{},"rescanonstartup":0}, \
+ 	"userinfo":{"descr":"''","pic":""},"logging": \
+ 	{"logsdir":os.path.expanduser("~"),"privatechat":0,"chatrooms":0}, \
+-	"searches":{"maxresults":50,"re_filter":0,"history":[]}, \
++	"searches":{"maxresults":50,"re_filter":0,"history":[],
++	"filterin":[],"filterout":[],"filtersize":[],"filterbr":[]}, \
+  	"ui":{"chatme":"FOREST GREEN", "chatremote":"","chatlocal":"BLUE", \
++ 	"logcollapsed":0, \
+  	"chathilite":"", "search":"","searchq":"GREY", "decimalsep":","}}
+ 
+  	try:
+@@ -69,7 +71,7 @@
+ 		    print "Bogus config section:",i
+ 		elif j not in self.sections[i].keys():
+ 		    print "Bogus config option",j,"section",i
+-		elif j in ['login','passw','enc','downloaddir','customban','descr','pic','logsdir','incompletedir', 'autoreply', 'afterfinish', 'afterfolder'] or i == "ui":
++		elif j in ['login','passw','enc','downloaddir','customban','descr','pic','logsdir','incompletedir', 'autoreply', 'afterfinish', 'afterfolder'] or (i == "ui" and j != "logcollapsed"):
+ 		    self.sections[i][j] = val
+ 		else:
+ 		    try:
+@@ -148,6 +150,14 @@
+ 	self.sections["transfers"]["fileindex"].sync()
+ 	self.sections["transfers"]["sharedmtimes"].sync()
+ 
++    def pushHistory(self, history, text, max):
++	if text in history:
++	    history.remove(text)
++	elif len(history) >= max:
++	   del history[-1]
++	history.insert(0, text)
++	self.writeConfig()
++	
+     def writeAliases(self):
+         f = open(self.filename+".alias","w")
+         cPickle.dump(self.aliases, f, 1)
+diff -rNu3 slsk-tmp1/pysoulseek/utils.py slsk-tmp2/pysoulseek/utils.py
+--- slsk-tmp1/pysoulseek/utils.py	2003-07-13 12:48:42.000000000 +0200
++++ slsk-tmp2/pysoulseek/utils.py	2003-07-13 12:48:42.000000000 +0200
+@@ -9,7 +9,7 @@
+ import os,dircache
+ import mp3
+ 
+-version = "1.2.2-hyriand-8"
++version = "1.2.2-hyriand-9"
+ 
+ def getServerList(url):
+         """ Parse server text file from http://www.slsk.org and 
+diff -rNu3 slsk-tmp1/pysoulseek/wxgui/frame.py slsk-tmp2/pysoulseek/wxgui/frame.py
+--- slsk-tmp1/pysoulseek/wxgui/frame.py	2003-07-13 12:48:42.000000000 +0200
++++ slsk-tmp2/pysoulseek/wxgui/frame.py	2003-07-13 12:48:42.000000000 +0200
+@@ -178,7 +178,11 @@
+ 
+         wxLog_SetActiveTarget(wxLogTextCtrl(self.log))
+     
+-	self.splitter.SplitHorizontally(self.nbpanel,self.log,400)	
++	if self.np.config.sections["ui"]["logcollapsed"] == 0:
++	    self.splitter.SplitHorizontally(self.nbpanel,self.log,400)
++	else:
++	    self.splitter.Initialize(self.nbpanel)
++	    self.log.Hide()
+ 
+ 	EVT_SIZE(self.splitter, self.OnSizeSplitter)
+ 
+@@ -204,10 +208,15 @@
+ 
+     def OnExpandLog(self, event):
+         if self.splitter.IsSplit():
++            self.np.config.sections["ui"]["logcollapsed"] = 1
++            self.np.config.writeConfig()
+             self.splitter.Unsplit()
+         else:
+-	    self.splitter.SplitHorizontally(self.nbpanel,self.log,400)
++            h = self.splitter.GetSize()[1] - 150
++	    self.splitter.SplitHorizontally(self.nbpanel,self.log,h)
+ 	    self.log.Show()
++	    self.np.config.sections["ui"]["logcollapsed"] = 0
++	    self.np.config.writeConfig()
+ 
+     def RescanFinished(self):
+ 	self.mainmenu.Enable(self.settingsID,1)
+diff -rNu3 slsk-tmp1/pysoulseek/wxgui/search.py slsk-tmp2/pysoulseek/wxgui/search.py
+--- slsk-tmp1/pysoulseek/wxgui/search.py	2003-07-13 12:48:42.000000000 +0200
++++ slsk-tmp2/pysoulseek/wxgui/search.py	2003-07-13 12:48:42.000000000 +0200
+@@ -92,12 +92,7 @@
+ 	if not text.strip():
+ 	    return
+ 	history = self.frame.np.config.sections["searches"]["history"]
+-	if text in history:
+-	    history.remove(text)
+-	elif len(history) > 9:
+-	   del history[-1]
+-	history.insert(0, text)
+-        self.frame.np.config.writeConfig()
++	self.frame.np.config.pushHistory(history, text, 10)
+         self.search.Clear()
+         self.search.Append("")
+         for item in history:
+@@ -164,10 +159,14 @@
+         """ Create a result window, which is a notebook tab. """
+         panel = wxPanel(self.resultsnb, -1)
+         panel.filters = wxCheckBox(panel, -1, label = "Enable filters")
+-        panel.filterin =  wxTextCtrl(panel, -1, value = "", size = wxSize(55,20), style = wxTE_PROCESS_ENTER)
+-        panel.filterout =  wxTextCtrl(panel, -1, value = "", size = wxSize(55,20), style = wxTE_PROCESS_ENTER)
+-        panel.filtersize =  wxTextCtrl(panel, -1, value = "", size = wxSize(55,20), style = wxTE_PROCESS_ENTER)
+-        panel.filterbr =  wxTextCtrl(panel, -1, value = "", size = wxSize(45,20), style = wxTE_PROCESS_ENTER)
++        _filterin = [""] + self.frame.np.config.sections["searches"]["filterin"]
++        _filterout = [""] + self.frame.np.config.sections["searches"]["filterout"]
++        _filtersize = [""] + self.frame.np.config.sections["searches"]["filtersize"]
++        _filterbr = [""] + self.frame.np.config.sections["searches"]["filterbr"]
++        panel.filterin =  wxComboBox(panel, -1, choices = _filterin, style = wxCB_DROPDOWN)
++        panel.filterout =  wxComboBox(panel, -1, choices = _filterout, size = wxSize(55,20), style = wxCB_DROPDOWN)
++        panel.filtersize =  wxComboBox(panel, -1, choices = _filtersize, size = wxSize(80,20), style = wxCB_DROPDOWN)
++        panel.filterbr =  wxComboBox(panel, -1, choices = _filterbr, size = wxSize(80,20), style = wxCB_DROPDOWN)
+         panel.filterfree = wxCheckBox(panel, -1, label = "free slot")
+         close = wxButton(panel, -1, "Close")
+ 	closeignore = wxButton(panel, -1, "Close and ignore")
+@@ -434,7 +433,7 @@
+         else:
+             Searcher = FakeRe
+ 
+-        txt = encode(self.parent.filterin.GetLineText(0))
++        txt = encode(self.parent.filterin.GetValue())
+         filterin = None
+         if txt:
+             try:
+@@ -442,7 +441,7 @@
+             except sre_constants.error:
+                 pass
+ 
+-        txt = encode(self.parent.filterout.GetLineText(0))
++        txt = encode(self.parent.filterout.GetValue())
+         filterout = None
+         if txt:
+             try:
+@@ -450,8 +449,8 @@
+             except sre_constants.error:
+                 pass
+ 
+-        filtersize = encode(self.parent.filtersize.GetLineText(0)).replace(" ", "")
+-        filterbr = encode(self.parent.filterbr.GetLineText(0)).replace(" ", "")
++        filtersize = encode(self.parent.filtersize.GetValue()).replace(" ", "")
++        filterbr = encode(self.parent.filterbr.GetValue()).replace(" ", "")
+ 	return (filterin, filterout, filtersize, filterbr)
+ 
+     def checkFilter(self, filters, name, size, br, free):
+@@ -507,9 +506,10 @@
+             if filters is None or self.checkFilter(filters, name, size, br, immdownload):
+                 self.results_visible.append([len(self.results),name,user,size,msg.ulspeed,msg.inqueue,immdownload,bitrate,length,dir,br])
+                 results += 1
+-	if results and self.sortcol != -1:
+-	    self.SortList(self.sortcol, self.sortorder)
+-        self.SetItemCount(len(self.results_visible))
++	if results:
++	    if self.sortcol != -1:
++	        self.SortList(self.sortcol, self.sortorder)
++            self.SetItemCount(len(self.results_visible))
+         return results
+ 
+     def OnGetItemText(self, item, col):
+@@ -540,7 +540,23 @@
+ 	        self.results_visible = [i for i in self.results if self.checkFilter(filters, i[1], i[3], i[10], i[6])]
+         self.SetItemCount(len(self.results_visible))
+ 
++    def PushHistory(self, widget, title):
++        text = encode(widget.GetValue())
++        if not text.strip():
++        	return
++        history = self.frame.np.config.sections["searches"][title]
++        self.frame.np.config.pushHistory(history, text, 5)
++        widget.Clear()
++        widget.Append("")
++        for i in history:
++            widget.Append(i)
++        widget.SetValue(text)
++            
+     def OnRefilter(self, event):
++        self.PushHistory(self.parent.filterin, "filterin")
++        self.PushHistory(self.parent.filterout, "filterout")
++        self.PushHistory(self.parent.filtersize, "filtersize")
++        self.PushHistory(self.parent.filterbr, "filterbr")
+         self.refilter()
+ 
+     def SortList(self, col, order):

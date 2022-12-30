@@ -1,0 +1,111 @@
+diff -rNu3 slsk-tmp1/pysoulseek/utils.py slsk-tmp2/pysoulseek/utils.py
+--- slsk-tmp1/pysoulseek/utils.py	2003-06-18 21:57:38.000000000 +0200
++++ slsk-tmp2/pysoulseek/utils.py	2003-06-18 21:57:38.000000000 +0200
+@@ -9,7 +9,7 @@
+ import os,dircache
+ import mp3
+ 
+-version = "1.2.1-hyriand-5.2"
++version = "1.2.1-hyriand-6"
+ 
+ def getServerList(url):
+         """ Parse server text file from http://www.slsk.org and 
+diff -rNu3 slsk-tmp1/pysoulseek/wxgui/buttonsplitter.py slsk-tmp2/pysoulseek/wxgui/buttonsplitter.py
+--- slsk-tmp1/pysoulseek/wxgui/buttonsplitter.py	2003-05-04 18:09:14.000000000 +0200
++++ slsk-tmp2/pysoulseek/wxgui/buttonsplitter.py	2003-06-18 21:57:38.000000000 +0200
+@@ -10,6 +10,7 @@
+ class ButtonSplitterWindow(wxSplitterWindow):
+     def __init__(self, parent, id, getleft, getright, style = wxSP_3D): 
+         wxSplitterWindow.__init__(self,parent,id, style = style)
++        self.SetMinimumPaneSize(1)
+ 
+ 	self.panel = wxPanel(self, -1)
+ 	self.expbutton = wxButton(self.panel,-1,"<",size=(10,100))
+diff -rNu3 slsk-tmp1/pysoulseek/wxgui/chat.py slsk-tmp2/pysoulseek/wxgui/chat.py
+--- slsk-tmp1/pysoulseek/wxgui/chat.py	2003-06-18 21:57:38.000000000 +0200
++++ slsk-tmp2/pysoulseek/wxgui/chat.py	2003-06-18 21:57:38.000000000 +0200
+@@ -459,7 +459,9 @@
+     """
+     def __init__(self, parent, id, queue, privatechat, peerconns, frame, style = wxNO_3D|wxSP_3D):
+         wxSplitterWindow.__init__(self,parent,id,wxDefaultPosition,wxDefaultSize,style,"splitterWindow")
++        self.SetMinimumPaneSize(1)
+         splitter = wxSplitterWindow(self,-1,style=wxNO_3D|wxSP_3DSASH)
++        splitter.SetMinimumPaneSize(1)
+ 	userlistpanel = wxPanel(self,-1)
+         self.userslistctrl = UsersList(userlistpanel,-1,style=wxLC_REPORT|wxLC_VIRTUAL)
+ 	self.leave = wxButton(userlistpanel, -1, "Leave")
+diff -rNu3 slsk-tmp1/pysoulseek/wxgui/frame.py slsk-tmp2/pysoulseek/wxgui/frame.py
+--- slsk-tmp1/pysoulseek/wxgui/frame.py	2003-06-18 21:57:38.000000000 +0200
++++ slsk-tmp2/pysoulseek/wxgui/frame.py	2003-06-18 21:57:38.000000000 +0200
+@@ -151,17 +151,30 @@
+         self.SetMenuBar(self.mainmenu)
+ 
+         self.splitter = wxSplitterWindow(self, -1,style=wxSP_3DSASH)
+-	self.nb = notebook.IconNotebook(self.splitter, -1, style=wxCLIP_CHILDREN, frame = self)
++        
++        self.nbpanel = wxPanel(self.splitter,-1)
++        nbsizer = wxBoxSizer(wxVERTICAL)
++        
++	self.nb = notebook.IconNotebook(self.nbpanel, -1, style=wxCLIP_CHILDREN, frame = self)
++	nbsizer.Add(self.nb,1,wxEXPAND)
++	
++	expbutton = wxButton(self.nbpanel,-1,"-",size=wxSize(100,10))
++	nbsizer.Add(expbutton,0,wxALIGN_CENTER)
++	
++	self.nbpanel.SetSizer(nbsizer)
++	self.nbpanel.SetAutoLayout(True)
++	nbsizer.Fit(self.nbpanel)
+ 
+ 	self.sx = self.sy = None
+ 	
+ 	self.log = chat.OutputWindow(self.splitter,-1,style = wxTE_MULTILINE|wxTE_READONLY|wxTE_RICH)
+ 	
++	EVT_BUTTON(self, expbutton.GetId(), self.OnExpandLog)
+ 	EVT_RIGHT_UP(self.log, self.OnRightClickInLog)
+ 
+         wxLog_SetActiveTarget(wxLogTextCtrl(self.log))
+     
+-	self.splitter.SplitHorizontally(self.nb,self.log,400)	
++	self.splitter.SplitHorizontally(self.nbpanel,self.log,400)	
+ 
+ 	EVT_SIZE(self.splitter, self.OnSizeSplitter)
+ 
+@@ -185,6 +198,13 @@
+ 	if not self.np.config.needConfig():
+ 	    self.OnConnect(None)
+ 
++    def OnExpandLog(self, event):
++        if self.splitter.IsSplit():
++            self.splitter.Unsplit()
++        else:
++	    self.splitter.SplitHorizontally(self.nbpanel,self.log,400)
++	    self.log.Show()
++
+     def RescanFinished(self):
+ 	self.mainmenu.Enable(self.settingsID,1)
+ 	self.mainmenu.SetLabel(self.settingsID,"&Settings...")
+diff -rNu3 slsk-tmp1/pysoulseek/wxgui/search.py slsk-tmp2/pysoulseek/wxgui/search.py
+--- slsk-tmp1/pysoulseek/wxgui/search.py	2003-06-18 21:57:38.000000000 +0200
++++ slsk-tmp2/pysoulseek/wxgui/search.py	2003-06-18 21:57:38.000000000 +0200
+@@ -207,8 +207,8 @@
+ 
+ 	parent = self.resultsnb
+         self.resultsnb.DeletePage(selectednum)
+-#	if parent.GetPageCount() > selectednum:
+-#	    parent.SetSelection(0)
++	if parent.GetPageCount() > selectednum:
++	    parent.SetSelection(0)
+ 
+     def OnClose(self, event):
+ 	self.Close(0)
+diff -rNu3 slsk-tmp1/pysoulseek/wxgui/userinfobrowse.py slsk-tmp2/pysoulseek/wxgui/userinfobrowse.py
+--- slsk-tmp1/pysoulseek/wxgui/userinfobrowse.py	2003-06-18 21:57:38.000000000 +0200
++++ slsk-tmp2/pysoulseek/wxgui/userinfobrowse.py	2003-06-18 21:57:38.000000000 +0200
+@@ -296,6 +296,7 @@
+         self.close = wxButton(self, -1, "Close")
+ 	self.refresh = wxButton(self, -1, "Refresh")
+         splitter = wxSplitterWindow(self,-1,style=wxNO_3D|wxSP_3DSASH)
++        splitter.SetMinimumPaneSize(1)
+         self.tree = DirTreeCtrl(splitter, -1)
+         self.listctrl = FileListCtrl(splitter,-1,frame)
+ 
