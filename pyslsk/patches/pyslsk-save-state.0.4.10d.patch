@@ -1,0 +1,29 @@
+diff -ur pyslsk-0.4.10d/pysoulseek/wxgui/frame.py pyslsk-0.4.10d.patched/pysoulseek/wxgui/frame.py
+--- pyslsk-0.4.10d/pysoulseek/wxgui/frame.py	Thu Jan  2 03:58:40 2003
++++ pyslsk-0.4.10d.patched/pysoulseek/wxgui/frame.py	Fri Jan  3 20:18:35 2003
+@@ -107,6 +107,12 @@
+ 	self.settingsID = wxNewId()
+ 	menu.Append(self.settingsID, '&Settings...', 'Set up server name, login, password')
+ 	EVT_MENU(self, self.settingsID, self.OnSettings)
++
++	self.savestateID = wxNewId()
++	menu.Append(self.savestateID, 'Sa&ve State...', 'Save queue and stuff')
++	EVT_MENU(self, self.savestateID, self.OnSaveState)
++
++
+ 	menu.AppendSeparator()
+         self.exitID = wxNewId()
+         menu.Append(self.exitID, 'E&xit\tAlt-X', 'Get the heck outta here!')
+@@ -239,6 +245,12 @@
+ 	        self.mainmenu.SetHelpString(self.connectID,'Connect to '+self.serverstring)
+ 	        self.mainmenu.SetHelpString(self.disconnectID,'Disconnect from '+self.serverstring)
+ 
++    def OnSaveState(self, event):
++	self.np.config.sections["transfers"]["downloads"] = self.np.transfers.GetDownloads()
++	self.np.config.setConfig({"transfers":{"downloads":self.np.config.sections["transfers"]["downloads"],"sharedfiles":self.np.config.sections["transfers"]["sharedfiles"],"sharedfilesstreams":self.np.config.sections["transfers"]["sharedfilesstreams"]},"server":{"userlist":[i[0] for i in self.userlist],"autojoin":self.np.config.sections["server"]["autojoin"]}})
++	self.np.config.writeConfig()
++	self.logMessage("Saved queue and stuff...")
++
+     def OnAbout(self, event):
+ 	about.About(self, -1, "About PySoulSeek").ShowModal()
+ 

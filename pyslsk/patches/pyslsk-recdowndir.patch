@@ -1,0 +1,71 @@
+diff -ur pyslsk-0.4.10d/pysoulseek/transfers.py pyslsk-0.4.10d.patched/pysoulseek/transfers.py
+--- pyslsk-0.4.10d/pysoulseek/transfers.py	Thu Jan  2 17:10:32 2003
++++ pyslsk-0.4.10d.patched/pysoulseek/transfers.py	Tue Jan  7 20:59:49 2003
+@@ -139,7 +139,7 @@
+ 	    if direction == 0:
+ 		folder = os.path.join(self.downloaddir,path)
+ 		if not os.access(folder,os.F_OK):
+-		    os.mkdir(folder)
++		    os.makedirs(folder)
+ 
+     def UploadFailed(self,msg):
+         for i in self.peerconns:
+diff -ur pyslsk-0.4.10d/pysoulseek/wxgui/userinfobrowse.py pyslsk-0.4.10d.patched/pysoulseek/wxgui/userinfobrowse.py
+--- pyslsk-0.4.10d/pysoulseek/wxgui/userinfobrowse.py	Sat Dec 21 23:09:17 2002
++++ pyslsk-0.4.10d.patched/pysoulseek/wxgui/userinfobrowse.py	Tue Jan  7 21:43:18 2003
+@@ -179,6 +179,8 @@
+ 
+         self.parent = parent
+ 
++        self.curtreeitem = None;
++
+     def SetFileList(self, list):
+         """ Actually sets the list."""
+         if list is None:
+@@ -293,6 +295,9 @@
+         downloaddirID=wxNewId()
+         self.treemenu.Append(downloaddirID, 'Download Directory')
+         EVT_MENU(self.tree,downloaddirID, self.OnDownloadDir)
++        recdownloaddirID=wxNewId()
++        self.treemenu.Append(recdownloaddirID, 'Recursively Download Dir')
++        EVT_MENU(self.tree,recdownloaddirID, self.OnRecDownloadDir)
+         downloadfileID=wxNewId()
+         self.listmenu.Append(downloadfileID, 'Download File(s)')
+         EVT_MENU(self.listctrl,downloadfileID, self.OnDownloadFile)
+@@ -369,7 +374,8 @@
+ 
+     def OnTreeSelChanged(self, event):
+         """ On selection of a tree item, display the filelist"""
+-        self.listctrl.SetFileList(self.tree.GetPyData(event.GetItem()))
++        self.curtreeitem = event.GetItem()
++        self.listctrl.SetFileList(self.tree.GetPyData(self.curtreeitem))
+ 
+     def OnDownloadDir(self,event):
+         """ Get every file in the directory """
+@@ -378,6 +384,26 @@
+         for i in self.listctrl.list:
+             self.transfers.getFile(self.user, self.listctrl.dir+'\\'+i[1], dir)
+ 
++
++    def OnRecDownloadDir(self,event):
++        """ Download directory recursively """
++        self.RecDownloadDir(self.curtreeitem)
++
++    def RecDownloadDir(self,item, path = ""):
++        """ Download directory recursively """
++        import os
++        (dir, flist) = self.tree.GetPyData(item)
++        ldir = string.split(dir,'\\')[-1]   # local directory
++        ldir = os.path.join(path,ldir)
++        for i in flist:                     # Get the files in this dir
++            self.transfers.getFile(self.user, dir+'\\'+i[1], ldir)
++
++        if self.tree.ItemHasChildren(item): # Get the other dirs
++            i, cookie = self.tree.GetFirstChild(item, 0)
++            while i.IsOk():
++                self.RecDownloadDir(i, ldir)
++                i, cookie = self.tree.GetNextChild(item, cookie)
++
+     def OnDownloadFile(self,event):
+         """ Get selected files """
+ 	item = -1
