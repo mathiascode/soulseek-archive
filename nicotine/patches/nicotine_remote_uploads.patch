@@ -1,0 +1,24 @@
+--- transfers.py	2005-04-17 19:46:14.000000000 +0300
++++ transfers-with-uploads.py	2005-04-17 19:46:02.000000000 +0300
+@@ -306,8 +306,19 @@
+                     self.downloadspanel.update(i)
+ 		    break
+ 	    else:
+-		response = slskmessages.TransferResponse(conn,0,reason = "Cancelled", req = msg.req)
+-		self.eventprocessor.logMessage(_("Denied file request: %s") % str(vars(msg)),1)
++		# Remote Uploads only for users in list
++		if user in [i[0] for i in self.eventprocessor.userlist.userlist]:
++			transfer = Transfer(user = user, filename=msg.file , path='', status = _('Getting status'))
++			self.downloads.append(transfer)
++                	self.SaveDownloads()
++			self.queue.put(slskmessages.GetUserStatus(user))
++			transfer.req = newId()
++	    		self.downloadspanel.update(transfer)
++			return
++			
++		else:
++			response = slskmessages.TransferResponse(conn,0,reason = "Cancelled", req = msg.req)
++			self.eventprocessor.logMessage(_("Denied file request: %s") % str(vars(msg)),1)
+ 	else:
+ 	    friend = user in [i[0] for i in self.eventprocessor.userlist.userlist]
+ 	    if friend and self.eventprocessor.config.sections["transfers"]["friendsnolimits"]:
