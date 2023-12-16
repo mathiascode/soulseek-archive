@@ -1,0 +1,27 @@
+--- transfers.py	2005-04-17 21:00:09.000000000 +0300
++++ transfers-with-remote-uploads.py	2005-04-17 20:59:58.000000000 +0300
+@@ -287,9 +287,22 @@
+ 		    response = slskmessages.TransferResponse(conn,1,req = i.req)
+                     self.downloadspanel.update(i)
+ 		    break
++		
+ 	    else:
+-		response = slskmessages.TransferResponse(conn,0,reason = "Cancelled", req = msg.req)
+-		self.eventprocessor.logMessage("Denied file request: "+str(vars(msg)),1)
++		# Remote Uploads only for users in list
++		if user in [ i[0] for i in self.eventprocessor.config.sections["server"]["userlist"] ]:
++			transfer = Transfer(user = user, filename=msg.file , path='', status = 'Starting remote upload')
++			self.downloads.append(transfer)
++			self.SaveDownloads()
++			self.queue.put(slskmessages.GetUserStatus(user))
++			transfer.req = newId()
++			self.eventprocessor.ProcessRequestToPeer(user,slskmessages.TransferRequest(None,direction,transfer.req,filename, self.getFileSize(filename)))
++			self.downloadspanel.update(transfer)
++			return
++			
++		else:
++			response = slskmessages.TransferResponse(conn,0,reason = "Cancelled", req = msg.req)
++			self.eventprocessor.logMessage("Denied file request: "+str(vars(msg)),1)
+ 	else:
+ 	    if user in self.eventprocessor.config.sections["server"]["banlist"]:
+ 	        if self.eventprocessor.config.sections["transfers"]["usecustomban"]:
